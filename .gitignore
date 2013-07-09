@@ -1,5 +1,8 @@
 # History files
 .Rhistory
-
 # Example code in package build process
 *-Ex.R
+.Rproj.user
+DC2_Survey_Locations_work.R
+*.html
+*.md

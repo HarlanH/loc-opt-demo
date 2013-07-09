@@ -1,0 +1,115 @@
+Location Optimization in R
+========================================================
+
+Harlan D. Harris and Alan Briggs
+
+Summary: This document walks through several ways of optimizing locations
+in R, given ZIP code data about peoples' home and work. Techniques include
+mapping with the `ggmap` package, continuous optimization with `optim`,
+and global optimization with the `DEoptim` package.
+
+```{r setup, echo=FALSE}
+opts_chunk$set(fig.width=6, fig.height=4, echo=TRUE)
+
+options(stringsAsFactors=FALSE)
+
+library(ggplot2)
+library(zipcode)
+library(plyr)
+library(reshape2)
+library(compiler)
+suppressPackageStartupMessages(library(ggmap))
+library(mapproj)
+suppressPackageStartupMessages(library(DEoptim))
+```
+
+Setup
+-----
+
+First, load the ZIP code data, filtering out weird values and such. Then,
+add ZIP code information, including centroid latitude and longitude.
+
+```{r loading}
+dat <- read.csv('DC2_Survey_Locations.csv')
+
+dat <- subset(dat, Home_ZIP > 20000 & Home_ZIP < 30000 & 
+                  (is.na(Work_ZIP) | (Work_ZIP > 20000 & Work_ZIP < 30000)))
+
+dat <- mutate(dat,
+              Home_ZIP = as.character(Home_ZIP),
+              Work_ZIP = as.character(Work_ZIP))
+
+names(dat) <- tolower(names(dat))
+
+data(zipcode)
+home_zip <- zipcode
+names(home_zip) <- paste0("home_", names(home_zip))
+work_zip <- zipcode
+names(work_zip) <- paste0("work_", names(work_zip))
+
+dat <- join(dat, home_zip, by='home_zip')
+dat <- join(dat, work_zip, by='work_zip')
+
+summary(dat)
+```
+
+1. Simple Statistics for Locations
+----------------------------------
+
+Simplest approach is to find modal, mean, and median locations.
+
+2. Mapping Locations
+--------------------
+
+Generate maps at a variety of scales, and functions to work with
+them. Plot summary stat locations on the maps.
+
+3. Computing Distances and Costs
+--------------------------------
+
+At this scale, can pretend that the earth is flat, and just scale 
+lat/lon into km, then use cartesian distances.
+
+To compute distance to a commute, need to use the "point to line
+segment" distance calculation, or "point to point" if only one 
+location was provided.
+
+4. Mapping Single-Point Costs
+-----------------------------
+
+Iterate over a grid to get costs for various maps, then plot.
+
+5. Optimizing Single Points
+---------------------------
+
+Use simple Nelder-Mead optimization to find optimal cost.
+
+Is it the global optimum? Seems to be -- multiple runs give the same
+result.
+
+6. Computing N-Point Costs
+--------------------------
+
+If there are multiple locations, cost is the minimum cost, for each person,
+to get to any location.
+
+7. Local Minima in N-Point Optimization
+---------------------------------------
+
+Try that random restart with Nelder-Mead again. Plot triangles found in 
+each run on top of each other.
+
+8. Global N-Point Optimization
+------------------------------
+
+Use Differential Evolution, an algorithm that uses quasi-Darwinian 
+evolution of populations of candidate solutions, to (likely) find
+the global optimum.
+
+9. Mapping N-Point Solutions
+----------------------------
+
+Show the global optimum on maps.
+
+
+
