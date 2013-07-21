@@ -10,7 +10,7 @@ and global optimization with the `DEoptim` package.
 
 ```{r setup, echo=FALSE}
 library(knitr)
-opts_chunk$set(fig.width=6, fig.height=4, echo=TRUE)
+opts_chunk$set(fig.width=7, fig.height=5, echo=TRUE)
 
 options(stringsAsFactors=FALSE)
 
@@ -352,17 +352,33 @@ make_map(dc.maps[[4]]) + geom_polygon(data=datapoly, aes(x=x,y=y,color=value,gro
 7. Local Minima in N-Point Optimization
 ---------------------------------------
 
-Try that random restart with Nelder-Mead again. Plot triangles found in 
-each run on top of each other.
+Try that random restart with a gradient-based optimizer again. Use "L-BFGS-B" to
+support bounds. Plot triangles found in 
+each run on top of each other. Uh oh.
 
-```{r localminima}
+```{r localminima1, cache=TRUE}
 
-starting_points = list(c(google, microsoft, funger), c(microsoft-.01, google+.5, funger-.1), c(microsoft+.01, funger-.01, google+.005))
-three_loc <- llply(starting_points, function(sp) optim(sp, p2lsN_cost_opt, control=list(trace=0)))
+# constrain the points to be not too far from DC
+bigbox <- attr(dc.maps[[3]], "bb")
+lower_box <- rep(c(bigbox$ll.lon, bigbox$ll.lat), 3)
+upper_box <- rep(c(bigbox$ur.lon, bigbox$ur.lat), 3)
+
+nruns=20
+
+starting_points = rlply(nruns, function(i) unlist(sample(list(google, microsoft, funger), 3)) + rnorm(6, sd=.1))
+three_loc <- llply(starting_points, 
+                   function(sp) optim(sp, cmpfun(p2lsN_cost_opt), 
+                                      method="L-BFGS-B",
+                                      lower=lower_box, upper=upper_box,
+                                      control=list(trace=0)))
+
+```
+
+```{r localminima2}
 three_loc_pars <- laply(three_loc, function(ol) ol$par)
-print(three_loc_pars)
+#print(three_loc_pars)
 
-ids <- factor(1:3)
+ids <- factor(1:nruns)
 values <- data.frame(id=ids, value=laply(three_loc, function(x) x$value))
 positions <- data.frame(id = rep(ids, each=3),
                         x=as.vector(t(three_loc_pars[,c(1,3,5)])),
@@ -370,7 +386,6 @@ positions <- data.frame(id = rep(ids, each=3),
 datapoly <- merge(values, positions, by="id")
 make_map(dc.maps[[2]]) + geom_polygon(data=datapoly, aes(x=x,y=y,color=value,group=id), alpha=.1, size=2) +
     scale_color_continuous(low="blue", high="red")
-# one of these gets truncated by the plotter! 
 
 ```
 
@@ -382,10 +397,46 @@ Use Differential Evolution, an algorithm that uses quasi-Darwinian
 evolution of populations of candidate solutions, to (likely) find
 the global optimum.
 
+```{r deoptim, cache=TRUE}
+
+NP=60
+init <- matrix(runif(NP*6, min=raply(NP, lower_box), max=raply(NP, upper_box)), ncol=6)
+init[1,] <- c(microsoft, google, funger)
+
+# not currently using init!
+three_loc_de <- DEoptim(cmpfun(p2lsN_cost_opt), lower=lower_box, upper=upper_box,
+                     control=list(NP=60, itermax=100, trace=FALSE, strategy=2))
+
+
+```
+
 9. Mapping N-Point Solutions
 ----------------------------
 
-Show the global optimum on maps.
+Show the DE convergence, and the global optimum on maps. The global optimum is,
+roughly, Downtown + Rockville + Crystal City.
+
+```{r deoptim_plots}
+plot(three_loc_de, plot.type='bestvalit')
+
+ids <- factor(c("Past", "Optimized"))
+values <- data.frame(id=ids, value=c(tri1_cost, three_loc_de$optim$bestval))
+positions <- data.frame(id = rep(ids, each=3),
+                        x=c(google[[1]], microsoft[[1]], funger[[1]], three_loc_de$optim$bestmem[c(1,3,5)]),
+                        y=c(google[[2]], microsoft[[2]], funger[[2]], three_loc_de$optim$bestmem[c(2, 4, 6)]))
+
+datapoly <- merge(values, positions, by="id")
+make_map(dc.maps[[3]]) + geom_polygon(data=datapoly, aes(x=x,y=y,color=value,group=id), alpha=.1, size=2) +
+    scale_color_continuous(low="blue", high="red")
+
+make_map(dc.maps[[4]]) + geom_point(data=datapoly, aes(x=x,y=y,color=value), size=5) +
+    scale_color_continuous(low="blue", high="red")
+
+make_map(dc.maps[[5]]) + geom_point(data=datapoly, aes(x=x,y=y,color=value), size=5) +
+    scale_color_continuous(low="blue", high="red")
+
+```
+
 
 
 
