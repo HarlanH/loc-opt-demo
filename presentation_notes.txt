@@ -1,0 +1,13 @@
+0. Setup. 4 minutes. Show resulting data frame and explain.
+1. Simple stats. 2 minutes. 
+2. Mapping. 5 mins. Plyr, Open Street Map, ggplot2.
+3. Distances & costs. 8 mins. Compiler. 
+
+INFORMS-MD
+==========
+
+Skip Section 7 (local optima)
+Run but don't walk through Sections 8 and 9
+
+SPDC
+====

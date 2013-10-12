@@ -98,7 +98,7 @@ if (file.exists(maps_fn)) {
     dc.maps <- llply(9:13,
         function(z) get_map(location=c(lon=-77.034,lat=38.901), 
                              zoom=z, source='osm', color='bw'))
-    # TODO: cache this in case the server's down...
+    # cache this in case the server's down...
     save(dc.maps, file=maps_fn)
 }
 
@@ -191,6 +191,7 @@ location was provided.
 dist <- function(a,b,c,d, p=2) {
     (abs(a-b)^p + abs(c-d)^p)^(1/p)
 }
+dist.o <- cmpfun(dist)
 
 # distance from lon/lat to the df with four column names specified in cols
 # as (end1_x, end1_y, end2_x, end2_y), where end2 may be missing.
@@ -210,7 +211,7 @@ p2ls_cost_v <- function(df, cols, lon, lat, p=2, km_per_degree=69.11) {
     work_x = df[[cols[[3]]]] * km_per_degree * cos(lat); work_y = df[[cols[[4]]]] * km_per_degree
     
     # first, get the home distances
-    home_dists <- dist(home_x, param_x, home_y, param_y, p)
+    home_dists <- dist.o(home_x, param_x, home_y, param_y, p)
     
     # then, get the distances to the line segment, which may be NA
     # length of the segment (squared)
@@ -229,9 +230,9 @@ p2ls_cost_v <- function(df, cols, lon, lat, p=2, km_per_degree=69.11) {
 
     ifelse(is.na(seg_dists), home_dists, seg_dists)
 }
-
+p2ls_cost_v.o <- cmpfun(p2ls_cost_v)
 p2ls_cost <- function(df, lon, lat, p=2) {
-    sum(p2ls_cost_v(df, c("home_longitude", "home_latitude", "work_longitude", "work_latitude"), lon, lat, p))
+    sum(p2ls_cost_v.o(df, c("home_longitude", "home_latitude", "work_longitude", "work_latitude"), lon, lat, p))
 }
 
 p2ls_cost_funger <- p2ls_cost(dat, funger[[1]], funger[[2]])
@@ -261,11 +262,13 @@ Iterate over a grid to get costs for various maps, then plot.
 
 ```{r p2ls_cost_maps}
 
+# global call to p2ls_cost()
 make_map <- function(map) {
     bb = attr(map, "bb")
     grid <- expand.grid(lat=seq(from=bb$ll.lat, to=bb$ur.lat, length.out=41),
                         lon=seq(from=bb$ll.lon, to=bb$ur.lon, length.out=41))
-    grid <- adply(grid, 1, function(rr) data.frame(cost=p2ls_cost(dat, rr$lon, rr$lat)))
+    grid <- adply(grid, 1, 
+                  function(rr) data.frame(cost=p2ls_cost(dat, rr$lon, rr$lat)))
     
     ggmap(map, extent='device') + 
         geom_tile(data=grid, aes(x=lon, y=lat, fill=cost, alpha=1/cost)) +
@@ -289,8 +292,8 @@ for (map in dc.maps[c(1,3,5)]) {
 
 Use simple Nelder-Mead optimization to find optimal cost.
 
-Is it the global optimum? Seems to be -- multiple runs give the same
-result.
+Is it the global optimum? Seems to be -- multiple runs with different
+initial conditions give the same result.
 
 ```{r simple_p2ls_optim}
 
@@ -301,7 +304,7 @@ p2ls_cost_opt <- function(params) {
 
 starting_points = list(google, microsoft, funger)
 one_loc <- llply(starting_points, function(sp) optim(sp, p2ls_cost_opt, control=list(trace=0)))
-print(laply(one_loc, function(ol) ol$par))
+print(laply(one_loc, function(ol) ol$par)) # all the same!
 
 # reuse the last map...
 single_p2ls_optim = list(x=one_loc[[1]]$par[[1]], y=one_loc[[1]]$par[[2]])
@@ -318,32 +321,48 @@ to get to any location.
 
 ```{r npoint} 
 
+colnames <- c("home_longitude", "home_latitude",
+          "work_longitude", "work_latitude")
 p2lsN_cost <- function(dat, latlons, p=2) {
     # for each pair of latlons, calc p2ls_cost
+
     costs <- laply(1:(length(latlons)/2), 
-                   function(i) p2ls_cost_v(dat, 
-                                           c("home_longitude", "home_latitude", "work_longitude", "work_latitude"), 
-                                           latlons[[i*2-1]], latlons[[i*2]], p))
+                   function(i) p2ls_cost_v.o(dat, 
+                                               colnames, 
+                                               latlons[[i*2-1]], latlons[[i*2]], 
+                                               p))
     sum(aaply(costs, 2, min))
 }
+p2lsN_cost.o <- cmpfun(p2lsN_cost)
 p2lsN_cost_opt <- function(latlons) {
-    p2lsN_cost(dat, latlons)
+    p2lsN_cost.o(dat, latlons)
 }
 
 # get cost for two example triples of locations
 tri1_cost <- p2lsN_cost_opt(c(google, microsoft, funger))
 tri2_cost <- p2lsN_cost_opt(c(google, microsoft, single_p2ls_optim))
+print(tri1_cost)
+print(tri2_cost)
+```
 
+The three past locations are substantially better in the 3-location cost 
+function than the 1-location optimum plus two other locations! 
+
+```{r show_npoint}
 # bit of a hack from the geom_polygon docs to construct polygons of different colors
 ids <- factor(c(1,2))
 values <- data.frame(id=ids, value=c(tri1_cost, tri2_cost))
 positions <- data.frame(id = rep(ids, each=3),
-                        x=c(google[[1]], microsoft[[1]], funger[[1]], google[[1]], microsoft[[1]], single_p2ls_optim[[1]]),
-                        y=c(google[[2]], microsoft[[2]], funger[[2]], google[[2]], microsoft[[2]], single_p2ls_optim[[2]]))
+                        x=c(google[[1]], microsoft[[1]], funger[[1]], google[[1]],
+                            microsoft[[1]], single_p2ls_optim[[1]]),
+                        y=c(google[[2]], microsoft[[2]], funger[[2]], google[[2]],
+                            microsoft[[2]], single_p2ls_optim[[2]]))
 datapoly <- merge(values, positions, by="id")
 
 # blue is better than red...
-make_map(dc.maps[[4]]) + geom_polygon(data=datapoly, aes(x=x,y=y,color=value,group=id), alpha=.1, size=2) +
+make_map(dc.maps[[4]]) + 
+    geom_polygon(data=datapoly, aes(x=x,y=y,color=value,group=id), alpha=.1,
+                 size=2) +
     scale_color_continuous(low="blue", high="red")
 
 ```
@@ -352,19 +371,22 @@ make_map(dc.maps[[4]]) + geom_polygon(data=datapoly, aes(x=x,y=y,color=value,gro
 7. Local Minima in N-Point Optimization
 ---------------------------------------
 
-Try that random restart with a gradient-based optimizer again. Use "L-BFGS-B" to
-support bounds. Plot triangles found in 
+Try that random restart with a gradient-based optimizer again. 
+Use "L-BFGS-B" to support bounds. Plot triangles found in 
 each run on top of each other. Uh oh.
 
-```{r localminima1, cache=TRUE}
-
+```{r boundingboxen}
 # constrain the points to be not too far from DC
 bigbox <- attr(dc.maps[[3]], "bb")
 lower_box <- rep(c(bigbox$ll.lon, bigbox$ll.lat), 3)
 upper_box <- rep(c(bigbox$ur.lon, bigbox$ur.lat), 3)
 
-nruns=20
+```
 
+```{r localminima1, cache=TRUE}
+nruns=4
+# this takes 5-10 minutes for 20 runs..
+set.seed(1) # gets one bad local optimum, and 3 variations of a good one
 starting_points = rlply(nruns, function(i) unlist(sample(list(google, microsoft, funger), 3)) + rnorm(6, sd=.1))
 three_loc <- llply(starting_points, 
                    function(sp) optim(sp, cmpfun(p2lsN_cost_opt), 
@@ -384,7 +406,8 @@ positions <- data.frame(id = rep(ids, each=3),
                         x=as.vector(t(three_loc_pars[,c(1,3,5)])),
                         y=as.vector(t(three_loc_pars[,c(2,4,6)])))
 datapoly <- merge(values, positions, by="id")
-make_map(dc.maps[[2]]) + geom_polygon(data=datapoly, aes(x=x,y=y,color=value,group=id), alpha=.1, size=2) +
+make_map(dc.maps[[2]]) + 
+    geom_polygon(data=datapoly, aes(x=x,y=y,color=value,group=id), alpha=.1, size=2) +
     scale_color_continuous(low="blue", high="red")
 
 ```
@@ -399,13 +422,17 @@ the global optimum.
 
 ```{r deoptim, cache=TRUE}
 
-NP=60
-init <- matrix(runif(NP*6, min=raply(NP, lower_box), max=raply(NP, upper_box)), ncol=6)
-init[1,] <- c(microsoft, google, funger)
+# Could use the historical points as starting points, but it turns out not to
+# be a good enough location to matter much, so letting the algorithm pick
+# random points in the bounding box.
 
-# not currently using init!
+# This takes a few minutes. 
+# NP should be at least 60, itermax seems to converge around 100 or so,
+# and strategy doesn't seem to make much difference for this decision
+# surface.
 three_loc_de <- DEoptim(cmpfun(p2lsN_cost_opt), lower=lower_box, upper=upper_box,
-                     control=list(NP=60, itermax=100, trace=FALSE, strategy=2))
+                     control=list(NP=80, itermax=200, trace=TRUE, 
+                                  strategy=2, c=.5, VTR=362, reltol=.0001, steptol=20))
 
 
 ```
@@ -417,7 +444,9 @@ Show the DE convergence, and the global optimum on maps. The global optimum is,
 roughly, Downtown + Rockville + Crystal City.
 
 ```{r deoptim_plots}
-plot(three_loc_de, plot.type='bestvalit')
+# DEoptim bug makes plot.DEoptim not work right -- do it by hand
+iter_values <- three_loc_de$member$bestvalit[1:three_loc_de$optim$iter]
+qplot(seq_along(iter_values), iter_values)
 
 ids <- factor(c("Past", "Optimized"))
 values <- data.frame(id=ids, value=c(tri1_cost, three_loc_de$optim$bestval))
@@ -437,6 +466,28 @@ make_map(dc.maps[[5]]) + geom_point(data=datapoly, aes(x=x,y=y,color=value), siz
 
 ```
 
+All done!
 
+10. Possible Fun Extensions
+---------------------------
 
+In roughly easiest-to-hardest order.
 
+* Change the cost function to use Manhattan distance (p=1) instead of Euclidean 
+  distance (p=2). Find the single-location optimum location.
+
+* Change the cost function (`p2ls_cost_opt`) to be the mean of the two best 
+  point-to-line-segment costs, instead of just the best. How does this change the 
+  best 3-location optimum?
+  
+* Try another global optimization method, such as simulated annealing.
+
+* Profile this R code, find out why it's slow, and fix it.
+
+* Is there a variant of the cost function in the 3-location problem that's 
+  convex, allowing fast optimization?
+
+* Constrain the location(s) to be inside the original 10 mile x 10 mile square 
+  boundaries for the District of Columbia. (Tricky bit: L-BFGS-B can do 
+  rectangular bounding boxes, but not rotated bounding boxes.)
+  
