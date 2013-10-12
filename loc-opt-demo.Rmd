@@ -8,7 +8,9 @@ in R, given ZIP code data about peoples' home and work. Techniques include
 mapping with the `ggmap` package, continuous optimization with `optim`,
 and global optimization with the `DEoptim` package.
 
-```{r setup, echo=FALSE}
+For more information, see the [GitHub repository](https://github.com/HarlanH/loc-opt-demo).
+
+```{r setup, echo=TRUE}
 library(knitr)
 opts_chunk$set(fig.width=7, fig.height=5, echo=TRUE)
 
@@ -17,7 +19,6 @@ options(stringsAsFactors=FALSE)
 library(ggplot2)
 library(zipcode)
 library(plyr)
-library(reshape2)
 library(compiler)
 suppressPackageStartupMessages(library(ggmap))
 suppressPackageStartupMessages(library(mapproj))
@@ -51,7 +52,7 @@ names(work_zip) <- paste0("work_", names(work_zip))
 dat <- join(dat, home_zip, by='home_zip')
 dat <- join(dat, work_zip, by='work_zip')
 
-summary(dat)
+head(dat)
 ```
 
 1. Simple Statistics for Locations
@@ -61,13 +62,17 @@ Simplest approach is to find modal, mean, and median locations.
 
 ```{r simple}
 
+# get the most common work zip code
 simple_mode <- names(which.max(table(dat$work_zip)))
+# then look up in the previously-pulled list of work zip codes
 simple_mode <- unlist(work_zip[work_zip$work_zip==simple_mode, 
                                c('work_latitude', 'work_longitude')])
 
+# median's simpler...
 simple_median <- c(median(dat$work_latitude, na.rm=TRUE),
                    median(dat$work_longitude, na.rm=TRUE))
 
+# trim 10% from each edge of the work locaitons, then mean of that
 simple_trim_mean <- c(mean(dat$work_latitude, na.rm=TRUE, trim=.1),
                       mean(dat$work_longitude, na.rm=TRUE, trim=.1))
 
@@ -88,8 +93,9 @@ print(sum_work_locs)
 Generate maps at a variety of scales, and functions to work with
 them. Plot summary stat locations on the maps.
 
-```{r map}
-
+```{r loadmap}
+# this is slow, especially on a crowded network, so only pull the
+# maps once... (knitr has caching, but can be a bit tricky to set up...)
 maps_fn = "dc_maps.Rdata"
 if (file.exists(maps_fn)) {
     load(maps_fn)
@@ -101,7 +107,10 @@ if (file.exists(maps_fn)) {
     # cache this in case the server's down...
     save(dc.maps, file=maps_fn)
 }
+```
 
+```{r map}
+# Plot the locations on a mostly-zoomed-in map
 p <- ggmap(dc.maps[[4]], extent='device') + 
     geom_point(data=sum_work_locs, aes(x=lon, y=lat, color=type), size=6) +
     scale_color_brewer("Type", type='qual') +
@@ -157,11 +166,11 @@ p2p_cost_funger <- p2p_cost(dat, funger[[1]], funger[[2]], scale=100)
 p2p_cost_microsoft <- p2p_cost(dat, microsoft[[1]], microsoft[[2]], scale=100)
 p2p_cost_google <- p2p_cost(dat, google[[1]], google[[2]], scale=100)
 
-print(sprintf("Point-to-point Funger cost: %0.3f", 
+cat(sprintf("Point-to-point Funger cost: %0.3f", 
       p2p_cost_funger))
-print(sprintf("Point-to-point Microsoft cost: %0.3f",
+cat(sprintf("Point-to-point Microsoft cost: %0.3f",
       p2p_cost_microsoft))
-print(sprintf("Point-to-point Google cost: %0.3f",
+cat(sprintf("Point-to-point Google cost: %0.3f",
       p2p_cost_google))
 
 # map that
@@ -170,6 +179,7 @@ recent_locs <- data.frame(type=c('Funger', 'Microsoft', 'Google'),
                        lat=c(funger[[2]], microsoft[[2]], google[[2]]),
                           cost=c(p2p_cost_funger, p2p_cost_microsoft,
                                  p2p_cost_google))
+print(recent_locs)
 
 p <- ggmap(dc.maps[[4]], extent='device') + 
     geom_point(data=recent_locs, aes(x=lon, y=lat, color=cost), size=6) +
@@ -177,13 +187,12 @@ p <- ggmap(dc.maps[[4]], extent='device') +
     scale_color_continuous("Cost", low='blue', high='red') +
     ggtitle("Single-Point Cost of Recent Locations")
 print(p)
-
-
 ```
 
 To compute distance to a commute, need to use the "point to line
 segment" distance calculation, or "point to point" if only one 
-location was provided.
+location was provided. Skip the somewhat slow surface-of-a-sphere
+distance now, and just use a simpler version with a tangent plane.
 
 ```{r commute_cost}
 
@@ -231,10 +240,13 @@ p2ls_cost_v <- function(df, cols, lon, lat, p=2, km_per_degree=69.11) {
     ifelse(is.na(seg_dists), home_dists, seg_dists)
 }
 p2ls_cost_v.o <- cmpfun(p2ls_cost_v)
+
+# wrapper function for convenience
 p2ls_cost <- function(df, lon, lat, p=2) {
     sum(p2ls_cost_v.o(df, c("home_longitude", "home_latitude", "work_longitude", "work_latitude"), lon, lat, p))
 }
 
+# non-DRY :(
 p2ls_cost_funger <- p2ls_cost(dat, funger[[1]], funger[[2]])
 p2ls_cost_microsoft <- p2ls_cost(dat, microsoft[[1]], microsoft[[2]])
 p2ls_cost_google <- p2ls_cost(dat, google[[1]], google[[2]])
@@ -252,7 +264,7 @@ p <- ggmap(dc.maps[[4]], extent='device') +
     ggtitle("Location-to-Commute Cost of Recent Locations")
 print(p)
 
-
+print(recent_locs)
 ```
 
 4. Mapping Single-Point Costs
@@ -281,9 +293,6 @@ for (map in dc.maps[c(1,3,5)]) {
     p <- make_map(map) # handy to keep one around for later
     print(p)
 }
-
-
-
 ```
 
 
@@ -291,6 +300,8 @@ for (map in dc.maps[c(1,3,5)]) {
 ---------------------------
 
 Use simple Nelder-Mead optimization to find optimal cost.
+
+![Nelder-Mead/Simplex Optimization](neldermeadsteps.gif)
 
 Is it the global optimum? Seems to be -- multiple runs with different
 initial conditions give the same result.
@@ -309,15 +320,13 @@ print(laply(one_loc, function(ol) ol$par)) # all the same!
 # reuse the last map...
 single_p2ls_optim = list(x=one_loc[[1]]$par[[1]], y=one_loc[[1]]$par[[2]])
 p + annotate('point', x=single_p2ls_optim$x, y=single_p2ls_optim$y, size=6, color='white')
-
 ```
-
 
 6. Computing N-Point Costs
 --------------------------
 
-If there are multiple locations, cost is the minimum cost, for each person,
-to get to any location.
+If there are multiple locations, define as cost as the _minimum_ cost, 
+for each person, to get to any location.
 
 ```{r npoint} 
 
@@ -325,7 +334,6 @@ colnames <- c("home_longitude", "home_latitude",
           "work_longitude", "work_latitude")
 p2lsN_cost <- function(dat, latlons, p=2) {
     # for each pair of latlons, calc p2ls_cost
-
     costs <- laply(1:(length(latlons)/2), 
                    function(i) p2ls_cost_v.o(dat, 
                                                colnames, 
@@ -341,12 +349,11 @@ p2lsN_cost_opt <- function(latlons) {
 # get cost for two example triples of locations
 tri1_cost <- p2lsN_cost_opt(c(google, microsoft, funger))
 tri2_cost <- p2lsN_cost_opt(c(google, microsoft, single_p2ls_optim))
-print(tri1_cost)
-print(tri2_cost)
 ```
 
 The three past locations are substantially better in the 3-location cost 
-function than the 1-location optimum plus two other locations! 
+function (`r tri1_cost`) than the 1-location optimum plus two other locations
+(`r tri2_cost`)! Show that on a map:
 
 ```{r show_npoint}
 # bit of a hack from the geom_polygon docs to construct polygons of different colors
@@ -371,9 +378,10 @@ make_map(dc.maps[[4]]) +
 7. Local Minima in N-Point Optimization
 ---------------------------------------
 
-Try that random restart with a gradient-based optimizer again. 
-Use "L-BFGS-B" to support bounds. Plot triangles found in 
-each run on top of each other. Uh oh.
+We want to use the new 3-point-to-line-segment cost function
+to find 3 optimal locations. Now, using "L-BFGS-B" algorithm, which
+is an iterative quasi-Newton algorithm that supports bounds on the
+parameters. Plot triangles found in each run on top of each other. Uh oh.
 
 ```{r boundingboxen}
 # constrain the points to be not too far from DC
@@ -383,10 +391,12 @@ upper_box <- rep(c(bigbox$ur.lon, bigbox$ur.lat), 3)
 
 ```
 
-```{r localminima1, cache=TRUE}
-nruns=4
-# this takes 5-10 minutes for 20 runs..
+```{r localminima1}
+# this takes 5-10 minutes for 20 runs... find a random seed that lets us demo
+# the problem faster...
 set.seed(1) # gets one bad local optimum, and 3 variations of a good one
+nruns=4
+
 starting_points = rlply(nruns, function(i) unlist(sample(list(google, microsoft, funger), 3)) + rnorm(6, sd=.1))
 three_loc <- llply(starting_points, 
                    function(sp) optim(sp, cmpfun(p2lsN_cost_opt), 
@@ -398,8 +408,9 @@ three_loc <- llply(starting_points,
 
 ```{r localminima2}
 three_loc_pars <- laply(three_loc, function(ol) ol$par)
-#print(three_loc_pars)
+print(three_loc_pars)
 
+# turn these into a set of triangles and plot them
 ids <- factor(1:nruns)
 values <- data.frame(id=ids, value=laply(three_loc, function(x) x$value))
 positions <- data.frame(id = rep(ids, each=3),
@@ -409,18 +420,19 @@ datapoly <- merge(values, positions, by="id")
 make_map(dc.maps[[2]]) + 
     geom_polygon(data=datapoly, aes(x=x,y=y,color=value,group=id), alpha=.1, size=2) +
     scale_color_continuous(low="blue", high="red")
-
 ```
 
+It found several good triangles (blue), and one bad one (red). Let's throw some
+horsepower at this to be more confident of a global solution.
 
 8. Global N-Point Optimization
 ------------------------------
 
 Use Differential Evolution, an algorithm that uses quasi-Darwinian 
-evolution of populations of candidate solutions, to (likely) find
-the global optimum.
+evolution of populations of candidate solutions, with Nelder-Mead-like
+gradient heuristics, to (likely) find the global optimum.
 
-```{r deoptim, cache=TRUE}
+```{r deoptim}
 
 # Could use the historical points as starting points, but it turns out not to
 # be a good enough location to matter much, so letting the algorithm pick
@@ -431,10 +443,10 @@ the global optimum.
 # and strategy doesn't seem to make much difference for this decision
 # surface.
 three_loc_de <- DEoptim(cmpfun(p2lsN_cost_opt), lower=lower_box, upper=upper_box,
-                     control=list(NP=80, itermax=200, trace=TRUE, 
+                     control=list(NP=80, itermax=200, trace=FALSE, 
                                   strategy=2, c=.5, VTR=362, reltol=.0001, steptol=20))
-
-
+# get a copy of coffee...
+# Note that not using parallel because running on a Mac in an R console...
 ```
 
 9. Mapping N-Point Solutions
@@ -448,6 +460,8 @@ roughly, Downtown + Rockville + Crystal City.
 iter_values <- three_loc_de$member$bestvalit[1:three_loc_de$optim$iter]
 qplot(seq_along(iter_values), iter_values)
 
+# will show both the historical 3-location cost (Funger + Microsoft + Google)
+# as well as the theoretical best 3-location solution
 ids <- factor(c("Past", "Optimized"))
 values <- data.frame(id=ids, value=c(tri1_cost, three_loc_de$optim$bestval))
 positions <- data.frame(id = rep(ids, each=3),
@@ -464,9 +478,10 @@ make_map(dc.maps[[4]]) + geom_point(data=datapoly, aes(x=x,y=y,color=value), siz
 make_map(dc.maps[[5]]) + geom_point(data=datapoly, aes(x=x,y=y,color=value), size=5) +
     scale_color_continuous(low="blue", high="red")
 
+print(datapoly)
 ```
 
-All done!
+And we're done with the demo!
 
 10. Possible Fun Extensions
 ---------------------------
@@ -482,7 +497,8 @@ In roughly easiest-to-hardest order.
   
 * Try another global optimization method, such as simulated annealing.
 
-* Profile this R code, find out why it's slow, and fix it.
+* Profile this R code, find out why it's slow, and fix it. Supporting multicore 
+  would be low-hanging fruit.
 
 * Is there a variant of the cost function in the 3-location problem that's 
   convex, allowing fast optimization?
