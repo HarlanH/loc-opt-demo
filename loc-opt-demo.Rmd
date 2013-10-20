@@ -166,13 +166,6 @@ p2p_cost_funger <- p2p_cost(dat, funger[[1]], funger[[2]], scale=100)
 p2p_cost_microsoft <- p2p_cost(dat, microsoft[[1]], microsoft[[2]], scale=100)
 p2p_cost_google <- p2p_cost(dat, google[[1]], google[[2]], scale=100)
 
-cat(sprintf("Point-to-point Funger cost: %0.3f", 
-      p2p_cost_funger))
-cat(sprintf("Point-to-point Microsoft cost: %0.3f",
-      p2p_cost_microsoft))
-cat(sprintf("Point-to-point Google cost: %0.3f",
-      p2p_cost_google))
-
 # map that
 recent_locs <- data.frame(type=c('Funger', 'Microsoft', 'Google'),
                        lon=c(funger[[1]], microsoft[[1]], google[[1]]),
@@ -189,10 +182,20 @@ p <- ggmap(dc.maps[[4]], extent='device') +
 print(p)
 ```
 
-To compute distance to a commute, need to use the "point to line
+We're defining a simple cost function based on the sums of the point-to-point distances between 
+the target point and each of the work locations:
+
+$$ \operatorname{cost} = \sum_{\operatorname{workloc}} d(p, \operatorname{workloc}) $$
+
+where $d$ is distance-on-a-sphere, which in this case is extremely close to Euclidean distance.
+
+Note: The sum of convex cost functions is provably convex.
+
+To compute distance to a _commute_, we need to use the "point to line
 segment" distance calculation, or "point to point" if only one 
-location was provided. Skip the somewhat slow surface-of-a-sphere
-distance now, and just use a simpler version with a tangent plane.
+location was provided (unemployed, work at home, classified). 
+Skip the somewhat slow surface-of-a-sphere
+distance now, and just use a simpler Euclidean distance.
 
 ```{r commute_cost}
 
@@ -251,21 +254,26 @@ p2ls_cost_funger <- p2ls_cost(dat, funger[[1]], funger[[2]])
 p2ls_cost_microsoft <- p2ls_cost(dat, microsoft[[1]], microsoft[[2]])
 p2ls_cost_google <- p2ls_cost(dat, google[[1]], google[[2]])
 
-recent_locs <- data.frame(type=c('Funger', 'Microsoft', 'Google'),
+recent_locs_p2ls <- data.frame(type=c('Funger', 'Microsoft', 'Google'),
                        lon=c(funger[[1]], microsoft[[1]], google[[1]]),
                        lat=c(funger[[2]], microsoft[[2]], google[[2]]),
                           cost=c(p2ls_cost_funger, p2ls_cost_microsoft,
                                  p2ls_cost_google))
 
 p <- ggmap(dc.maps[[4]], extent='device') + 
-    geom_point(data=recent_locs, aes(x=lon, y=lat, color=cost), size=6) +
-    geom_text(data=recent_locs, aes(x=lon, y=lat, color=cost, label=type), size=6, vjust=-1) +
+    geom_point(data=recent_locs_p2ls, aes(x=lon, y=lat, color=cost), size=6) +
+    geom_text(data=recent_locs_p2ls, aes(x=lon, y=lat, color=cost, label=type), size=6, vjust=-1) +
     scale_color_continuous("Cost", low='blue', high='red') +
     ggtitle("Location-to-Commute Cost of Recent Locations")
 print(p)
 
-print(recent_locs)
+print(recent_locs_p2ls)
 ```
+
+Interestingly, with point-to-line-segment (work location) cost, 
+Google is very slightly better than Funger, 
+whereas with point-to-point (commute) cost, Funger was substantially better. 
+Microsoft is definitely not great in either case.
 
 4. Mapping Single-Point Costs
 -----------------------------
@@ -295,6 +303,7 @@ for (map in dc.maps[c(1,3,5)]) {
 }
 ```
 
+The pretty maps show that downtown is the best place for a Meetup. </obvious>
 
 5. Optimizing Single Points
 ---------------------------
@@ -304,7 +313,10 @@ Use simple Nelder-Mead optimization to find optimal cost.
 ![Nelder-Mead/Simplex Optimization](neldermeadsteps.gif)
 
 Is it the global optimum? Seems to be -- multiple runs with different
-initial conditions give the same result.
+initial conditions give the same result. The individual cost functions
+are not quite convex (all points on the line segment are optima), but it
+may be that the sum, in practice, is, at least if you start in a reasonable
+neighborhood.
 
 ```{r simple_p2ls_optim}
 
@@ -325,8 +337,10 @@ p + annotate('point', x=single_p2ls_optim$x, y=single_p2ls_optim$y, size=6, colo
 6. Computing N-Point Costs
 --------------------------
 
-If there are multiple locations, define as cost as the _minimum_ cost, 
+If there are multiple locations, define the cost to be the _minimum_ cost, 
 for each person, to get to any location.
+
+$$ \operatorname{cost} = \sum_{\operatorname{person}} min_{\operatorname{loc}_i} d(\operatorname{loc}_i, \operatorname{commute}_{\operatorname{person}}) $$
 
 ```{r npoint} 
 
@@ -351,9 +365,9 @@ tri1_cost <- p2lsN_cost_opt(c(google, microsoft, funger))
 tri2_cost <- p2lsN_cost_opt(c(google, microsoft, single_p2ls_optim))
 ```
 
-The three past locations are substantially better in the 3-location cost 
+The three _past_ locations are substantially better in the 3-location cost 
 function (`r tri1_cost`) than the 1-location optimum plus two other locations
-(`r tri2_cost`)! Show that on a map:
+(`r tri2_cost`)! Show that on a map (blue = good; red = less good):
 
 ```{r show_npoint}
 # bit of a hack from the geom_polygon docs to construct polygons of different colors
@@ -379,9 +393,12 @@ make_map(dc.maps[[4]]) +
 ---------------------------------------
 
 We want to use the new 3-point-to-line-segment cost function
-to find 3 optimal locations. Now, using "L-BFGS-B" algorithm, which
+to find 3 optimal locations. Now, I'm using the "L-BFGS-B" algorithm, which
 is an iterative quasi-Newton algorithm that supports bounds on the
-parameters. Plot triangles found in each run on top of each other. Uh oh.
+parameters. 
+
+To see if there are local minima, run a few times with different starting points.
+Plot the triangles found in each run on top of each other. Uh oh.
 
 ```{r boundingboxen}
 # constrain the points to be not too far from DC
@@ -405,6 +422,18 @@ three_loc <- llply(starting_points,
                                       control=list(trace=0)))
 
 ```
+
+I'll refer you to [Wikipedia's entry on BFGS](http://en.wikipedia.org/wiki/BFGS_method) for a technical
+overview. Roughly (as I understand it):
+
+1. At any given point, you can measure the local curvature of the surface.
+2. Based on your current estimate of the curvature of the surface, use trial-and-error to
+  find a good distance to go in the seemingly-best direction.
+3. Update your estimate of the curvature of the surface based on how far you moved and how the local
+  curvature changed.
+
+L-BFGS is memory-efficient in high-dimensional spaces, at the cost of some precision. L-BFGS-B
+adds low/high constraints on each dimension.
 
 ```{r localminima2}
 three_loc_pars <- laply(three_loc, function(ol) ol$par)
@@ -430,7 +459,7 @@ horsepower at this to be more confident of a global solution.
 
 Use Differential Evolution, an algorithm that uses quasi-Darwinian 
 evolution of populations of candidate solutions, with Nelder-Mead-like
-gradient heuristics, to (likely) find the global optimum.
+gradient heuristics at each generation, to (likely) find the global optimum.
 
 ```{r deoptim}
 
@@ -443,17 +472,22 @@ gradient heuristics, to (likely) find the global optimum.
 # and strategy doesn't seem to make much difference for this decision
 # surface.
 three_loc_de <- DEoptim(cmpfun(p2lsN_cost_opt), lower=lower_box, upper=upper_box,
-                     control=list(NP=80, itermax=200, trace=FALSE, 
-                                  strategy=2, c=.5, VTR=362, reltol=.0001, steptol=20))
+                     control=list(NP=100, itermax=300, trace=FALSE, 
+                                  strategy=2, c=.5, VTR=362, reltol=.0001, steptol=25))
 # get a copy of coffee...
 # Note that not using parallel because running on a Mac in an R console...
 ```
+
+Here's a nice illustration of the simplest version of the algorithm, 
+from [a blog post](http://beyondtheblueeventhorizon.blogspot.com/2011/04/differential-evolution-optimization.html).
+
+![differential evolution](DE_1.png)
 
 9. Mapping N-Point Solutions
 ----------------------------
 
 Show the DE convergence, and the global optimum on maps. The global optimum is,
-roughly, Downtown + Rockville + Crystal City.
+roughly, Downtown + Rockville + Southern Arlington.
 
 ```{r deoptim_plots}
 # DEoptim bug makes plot.DEoptim not work right -- do it by hand
@@ -492,7 +526,7 @@ In roughly easiest-to-hardest order.
   distance (p=2). Find the single-location optimum location.
 
 * Change the cost function (`p2ls_cost_opt`) to be the mean of the two best 
-  point-to-line-segment costs, instead of just the best. How does this change the 
+  point-to-line-segment costs, instead of just the single best. How does this change the 
   best 3-location optimum?
   
 * Try another global optimization method, such as simulated annealing.

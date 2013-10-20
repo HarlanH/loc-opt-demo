@@ -1,13 +1,19 @@
-0. Setup. 4 minutes. Show resulting data frame and explain.
-1. Simple stats. 2 minutes. 
-2. Mapping. 5 mins. Plyr, Open Street Map, ggplot2.
-3. Distances & costs. 8 mins. Compiler. 
-
 INFORMS-MD
 ==========
 
-Skip Section 7 (local optima)
-Run but don't walk through Sections 8 and 9
+~20 minutes in Learn, about 45 minutes (minus interaction) in Do
+
+Learn goals:
+* Show knitted doc
+* Show results
+* Side-track into algorithms
+
+Do goals:
+* Walk through code a block at a time
+* People should follow along
+* People should feel free to look at data, try different things, as we go
 
 SPDC
 ====
+
+Walk through code a block at a time. Do side-tracks as we get to them.
