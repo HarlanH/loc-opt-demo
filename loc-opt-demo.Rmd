@@ -29,7 +29,7 @@ Setup
 -----
 
 First, load the ZIP code data, filtering out weird values and such. Then,
-add ZIP code information, including centroid latitude and longitude.
+add ZIP code information, including ZIP centroid latitude and longitude.
 
 ```{r loading}
 dat <- read.csv('DC2_Survey_Locations.csv')
@@ -58,7 +58,7 @@ head(dat)
 1. Simple Statistics for Locations
 ----------------------------------
 
-Simplest approach is to find modal, mean, and median locations.
+A simplest approach would be to find modal, mean, and median work locations.
 
 ```{r simple}
 
@@ -87,11 +87,13 @@ sum_work_locs <- data.frame(type=c('Modal', 'Median', 'Trimmed Mean'),
 print(sum_work_locs)
 ```
 
+It would be even more useful to put those locations on a map.
+
 2. Mapping Locations
 --------------------
 
 Generate maps at a variety of scales, and functions to work with
-them. Plot summary stat locations on the maps.
+them. Plot summary statistic locations on the maps.
 
 ```{r loadmap}
 # this is slow, especially on a crowded network, so only pull the
@@ -116,10 +118,9 @@ p <- ggmap(dc.maps[[4]], extent='device') +
     scale_color_brewer("Type", type='qual') +
     ggtitle("Work Location Simple Optima")
 print(p)
-
-
 ```
 
+We're not doing that bad, as it turns out.
 
 3. Computing Distances and Costs
 --------------------------------
@@ -146,7 +147,12 @@ earth.dist <- function (long1, lat1, long2, lat2)
     return(d)
 }
 earth.dist.o <- cmpfun(earth.dist) # make it a bit faster
+```
 
+Define a simple point-to-point cost function, then calculate the costs
+of some recent venues for Data Science DC, and plot on a map.
+
+```{r costfn}
 # df must have cols work_longitude and work latitude
 # lon and lat must be scalars
 # scale just scales the units
@@ -182,14 +188,14 @@ p <- ggmap(dc.maps[[4]], extent='device') +
 print(p)
 ```
 
-We're defining a simple cost function based on the sums of the point-to-point distances between 
+The cost function is based on the sums of the point-to-point distances between 
 the target point and each of the work locations:
 
 $$ \operatorname{cost} = \sum_{\operatorname{workloc}} d(p, \operatorname{workloc}) $$
 
 where $d$ is distance-on-a-sphere, which in this case is extremely close to Euclidean distance.
 
-Note: The sum of convex cost functions is provably convex.
+Technical note: The sum of convex cost functions is provably convex.
 
 To compute distance to a _commute_, we need to use the "point to line
 segment" distance calculation, or "point to point" if only one 
@@ -198,7 +204,6 @@ Skip the somewhat slow surface-of-a-sphere
 distance now, and just use a simpler Euclidean distance.
 
 ```{r commute_cost}
-
 # p-norm computation. p = 2 is cartesian
 dist <- function(a,b,c,d, p=2) {
     (abs(a-b)^p + abs(c-d)^p)^(1/p)
@@ -248,7 +253,11 @@ p2ls_cost_v.o <- cmpfun(p2ls_cost_v)
 p2ls_cost <- function(df, lon, lat, p=2) {
     sum(p2ls_cost_v.o(df, c("home_longitude", "home_latitude", "work_longitude", "work_latitude"), lon, lat, p))
 }
+```
 
+Now, plot the costs of recent venues on a map, using point-to-line-segment.
+
+```{r p2ls_examples}
 # non-DRY :(
 p2ls_cost_funger <- p2ls_cost(dat, funger[[1]], funger[[2]])
 p2ls_cost_microsoft <- p2ls_cost(dat, microsoft[[1]], microsoft[[2]])
@@ -270,14 +279,15 @@ print(p)
 print(recent_locs_p2ls)
 ```
 
-Interestingly, with point-to-line-segment (work location) cost, 
+Interestingly, with point-to-line-segment (commute) cost, 
 Google is very slightly better than Funger, 
-whereas with point-to-point (commute) cost, Funger was substantially better. 
+whereas with point-to-point (work location) cost, Funger was substantially better. 
 Microsoft is definitely not great in either case.
 
 4. Mapping Single-Point Costs
 -----------------------------
 
+Pictures are worth many words. 
 Iterate over a grid to get costs for various maps, then plot.
 
 ```{r p2ls_cost_maps}
@@ -308,24 +318,25 @@ The pretty maps show that downtown is the best place for a Meetup. </obvious>
 5. Optimizing Single Points
 ---------------------------
 
-Use simple Nelder-Mead optimization to find optimal cost.
+Use relatively simple Nelder-Mead optimization to find optimal cost. 
 
 ![Nelder-Mead/Simplex Optimization](neldermeadsteps.gif)
 
 Is it the global optimum? Seems to be -- multiple runs with different
-initial conditions give the same result. The individual cost functions
+initial conditions give the same result. (I've separately run many times,
+not just the few shown here.) The individual cost functions
 are not quite convex (all points on the line segment are optima), but it
-may be that the sum, in practice, is, at least if you start in a reasonable
+may be that the sum is in practice, at least if you start in a reasonable
 neighborhood.
 
 ```{r simple_p2ls_optim}
-
 # wrap for optim()
 p2ls_cost_opt <- function(params) {
     p2ls_cost(dat, params[[1]], params[[2]])
 }
 
 starting_points = list(google, microsoft, funger)
+# call optim, which defaults to Nelder-Mead/Simplex
 one_loc <- llply(starting_points, function(sp) optim(sp, p2ls_cost_opt, control=list(trace=0)))
 print(laply(one_loc, function(ol) ol$par)) # all the same!
 
@@ -334,16 +345,17 @@ single_p2ls_optim = list(x=one_loc[[1]]$par[[1]], y=one_loc[[1]]$par[[2]])
 p + annotate('point', x=single_p2ls_optim$x, y=single_p2ls_optim$y, size=6, color='white')
 ```
 
+A couple blocks South of Dupont Circle.
+
 6. Computing N-Point Costs
 --------------------------
 
 If there are multiple locations, define the cost to be the _minimum_ cost, 
-for each person, to get to any location.
+for each person, to get to any location from their commute.
 
 $$ \operatorname{cost} = \sum_{\operatorname{person}} min_{\operatorname{loc}_i} d(\operatorname{loc}_i, \operatorname{commute}_{\operatorname{person}}) $$
 
 ```{r npoint} 
-
 colnames <- c("home_longitude", "home_latitude",
           "work_longitude", "work_latitude")
 p2lsN_cost <- function(dat, latlons, p=2) {
@@ -365,10 +377,6 @@ tri1_cost <- p2lsN_cost_opt(c(google, microsoft, funger))
 tri2_cost <- p2lsN_cost_opt(c(google, microsoft, single_p2ls_optim))
 ```
 
-The three _past_ locations are substantially better in the 3-location cost 
-function (`r tri1_cost`) than the 1-location optimum plus two other locations
-(`r tri2_cost`)! Show that on a map (blue = good; red = less good):
-
 ```{r show_npoint}
 # bit of a hack from the geom_polygon docs to construct polygons of different colors
 ids <- factor(c(1,2))
@@ -388,6 +396,9 @@ make_map(dc.maps[[4]]) +
 
 ```
 
+The three _past_ locations are substantially better in the 3-location cost 
+function (`r tri1_cost`, blue) than the 1-location optimum plus two other locations
+(`r tri2_cost`, red)! 
 
 7. Local Minima in N-Point Optimization
 ---------------------------------------
@@ -396,9 +407,6 @@ We want to use the new 3-point-to-line-segment cost function
 to find 3 optimal locations. Now, I'm using the "L-BFGS-B" algorithm, which
 is an iterative quasi-Newton algorithm that supports bounds on the
 parameters. 
-
-To see if there are local minima, run a few times with different starting points.
-Plot the triangles found in each run on top of each other. Uh oh.
 
 ```{r boundingboxen}
 # constrain the points to be not too far from DC
@@ -435,6 +443,9 @@ overview. Roughly (as I understand it):
 L-BFGS is memory-efficient in high-dimensional spaces, at the cost of some precision. L-BFGS-B
 adds low/high constraints on each dimension.
 
+To see if there are local minima, run a few times with different starting points.
+Plot the triangles found in each run on top of each other. Uh oh.
+
 ```{r localminima2}
 three_loc_pars <- laply(three_loc, function(ol) ol$par)
 print(three_loc_pars)
@@ -462,10 +473,9 @@ evolution of populations of candidate solutions, with Nelder-Mead-like
 gradient heuristics at each generation, to (likely) find the global optimum.
 
 ```{r deoptim}
-
 # Could use the historical points as starting points, but it turns out not to
 # be a good enough location to matter much, so letting the algorithm pick
-# random points in the bounding box.
+# random points in the bounding box instead.
 
 # This takes a few minutes. 
 # NP should be at least 60, itermax seems to converge around 100 or so,
@@ -531,13 +541,12 @@ In roughly easiest-to-hardest order.
   
 * Try another global optimization method, such as simulated annealing.
 
+* Constrain the location(s) to be inside the original 10 mile x 10 mile square 
+  boundaries for the District of Columbia. (Tricky bit: L-BFGS-B can do 
+  rectangular bounding boxes, but not rotated bounding boxes.)
+
 * Profile this R code, find out why it's slow, and fix it. Supporting multicore 
   would be low-hanging fruit.
 
 * Is there a variant of the cost function in the 3-location problem that's 
-  convex, allowing fast optimization?
-
-* Constrain the location(s) to be inside the original 10 mile x 10 mile square 
-  boundaries for the District of Columbia. (Tricky bit: L-BFGS-B can do 
-  rectangular bounding boxes, but not rotated bounding boxes.)
-  
+  convex, allowing faster optimization?  
