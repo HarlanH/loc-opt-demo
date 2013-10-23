@@ -10,4 +10,4 @@ DC2_Survey_Locations_work.R
 *.png
 *.Rdata
 /cache/
-loc-opt-demo.R
+#loc-opt-demo.R
