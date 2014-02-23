@@ -5,7 +5,7 @@ Harlan D. Harris and Alan Briggs
 
 Summary: This document walks through several ways of optimizing locations
 in R, given ZIP code data about peoples' home and work. Techniques include
-mapping with the `ggmap` package, continuous optimization with `optim`,
+mapping with the `ggmaps` and `rmaps` package (beta!), continuous optimization with `optim`,
 and global optimization with the `DEoptim` package.
 
 For more information, see the [GitHub repository](https://github.com/HarlanH/loc-opt-demo).
@@ -16,13 +16,14 @@ opts_chunk$set(fig.width=7, fig.height=5, echo=TRUE)
 
 options(stringsAsFactors=FALSE)
 
-library(ggplot2)
+suppressPackageStartupMessages(library(ggplot2))
 library(zipcode)
 library(plyr)
 library(compiler)
 suppressPackageStartupMessages(library(ggmap))
 suppressPackageStartupMessages(library(mapproj))
 suppressPackageStartupMessages(library(DEoptim))
+suppressMessages(library(rMaps))
 ```
 
 Setup
@@ -32,16 +33,11 @@ First, load the ZIP code data, filtering out weird values and such. Then,
 add ZIP code information, including ZIP centroid latitude and longitude.
 
 ```{r loading}
-dat <- read.csv('DC2_Survey_Locations.csv')
+dat <- subset(read.csv('NYOSP_Locations.csv', colClasses='character'), select=c(Home.Zip, Work.Zip))
+dat <- rename(dat, c('Home.Zip'='home_zip', 'Work.Zip'='work_zip'))
 
-dat <- subset(dat, Home_ZIP > 20000 & Home_ZIP < 30000 & 
-                  (is.na(Work_ZIP) | (Work_ZIP > 20000 & Work_ZIP < 30000)))
-
-dat <- mutate(dat,
-              Home_ZIP = as.character(Home_ZIP),
-              Work_ZIP = as.character(Work_ZIP))
-
-names(dat) <- tolower(names(dat))
+# dat <- subset(dat, Home_ZIP > 20000 & Home_ZIP < 30000 & 
+#                   (is.na(Work_ZIP) | (Work_ZIP > 20000 & Work_ZIP < 30000)))
 
 data(zipcode)
 home_zip <- zipcode
@@ -51,6 +47,13 @@ names(work_zip) <- paste0("work_", names(work_zip))
 
 dat <- join(dat, home_zip, by='home_zip')
 dat <- join(dat, work_zip, by='work_zip')
+
+times_square <- c(40.7577, -73.9857) # lat, long
+dat <- subset(dat, (abs(home_latitude - times_square[[1]]) < 2.0 & 
+             abs(home_longitude - times_square[[2]]) < 2.0) |
+            (abs(work_latitude - times_square[[1]]) < 2.0 & 
+             abs(work_longitude - times_square[[2]]) < 2.0))
+dat <- subset(dat, !is.na(home_latitude))
 
 head(dat)
 ```
