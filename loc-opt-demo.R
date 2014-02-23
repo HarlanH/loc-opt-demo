@@ -251,11 +251,14 @@ p2ls_cost_opt <- function(params) {
 
 starting_points = list(google, microsoft, funger)
 # call optim, which defaults to Nelder-Mead/Simplex
-one_loc <- llply(starting_points, function(sp) optim(sp, p2ls_cost_opt, control=list(trace=0)))
+one_loc <- llply(starting_points, 
+                 function(sp) optim(sp, p2ls_cost_opt, 
+                                    control=list(trace=1)))
 print(laply(one_loc, function(ol) ol$par)) # all the same!
 
 # reuse the last map...
-single_p2ls_optim = list(x=one_loc[[1]]$par[[1]], y=one_loc[[1]]$par[[2]])
+single_p2ls_optim = list(x=one_loc[[1]]$par[[1]], 
+                         y=one_loc[[1]]$par[[2]])
 p + annotate('point', x=single_p2ls_optim$x, y=single_p2ls_optim$y, size=6, color='white')
 
 
@@ -319,7 +322,7 @@ three_loc <- llply(starting_points,
                    function(sp) optim(sp, cmpfun(p2lsN_cost_opt), 
                                       method="L-BFGS-B",
                                       lower=lower_box, upper=upper_box,
-                                      control=list(trace=0)))
+                                      control=list(trace=1)))
 
 
 
