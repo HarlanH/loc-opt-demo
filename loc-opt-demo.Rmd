@@ -303,7 +303,7 @@ qq <- transform(p2ls_venue_costs, address=name, lat=lat, lng=lon, lon=NULL, radi
 # })
 # TODO: color-code the icons!!
 #map$circle(c(p2ls_venue_costs$lat[[1]], p2ls_venue_costs$lon[[1]]), radius=1000)
-map$circle2(qq)
+map$circle2(qq) # issues with the iterator in the circle2 code
 map
 ```
 
@@ -384,7 +384,7 @@ single_p2ls_optim = list(x=one_loc[[1]]$par[[1]], y=one_loc[[1]]$par[[2]])
 
 ```{r simple_p2ls_optim_map, results='asis'}
 map <- Leaflet$new()
-map$setView(times_square, zoom = 10)
+map$setView(c(single_p2ls_optim$y, single_p2ls_optim$x), zoom = 14)
 map$tileLayer(provider = 'Stamen.Toner')
 d_ply(p2p_venue_costs, 1, function(row) {
   with(row, map$marker(c(single_p2ls_optim$y, single_p2ls_optim$x), bindPopup = name))
@@ -428,25 +428,20 @@ tri2_cost <- p2lsN_cost_opt(unlist(c(venue_triple[1:4], single_p2ls_optim$y, sin
 ```
 
 ```{r show_npoint, results='asis'}
+map <- Leaflet$new()
+map$setView(times_square, zoom = 10)
+map$tileLayer(provider = 'Stamen.Toner')
 
-# TODO! 
-
-# # bit of a hack from the geom_polygon docs to construct polygons of different colors
-# ids <- factor(c(1,2))
-# values <- data.frame(id=ids, value=c(tri1_cost, tri2_cost))
-# positions <- data.frame(id = rep(ids, each=3),
-#                         x=c(google[[1]], microsoft[[1]], funger[[1]], google[[1]],
-#                             microsoft[[1]], single_p2ls_optim[[1]]),
-#                         y=c(google[[2]], microsoft[[2]], funger[[2]], google[[2]],
-#                             microsoft[[2]], single_p2ls_optim[[2]]))
-# datapoly <- merge(values, positions, by="id")
-# 
-# # blue is better than red...
-# make_map(dc.maps[[4]]) + 
-#     geom_polygon(data=datapoly, aes(x=x,y=y,color=value,group=id), alpha=.1,
-#                  size=2) +
-#     scale_color_continuous(low="blue", high="red")
-
+mk_polygon <- function(lats, lons) {
+    stopifnot(length(lats)==length(lons))
+    coord_list <- llply(seq_along(lats), function(i) c(lons[[i]], lats[[i]]))
+    list(type='Feature',
+     geometry=list(type='Polygon', coordinates=coord_list))
+}
+polygons <- mk_polygon(venues$lat, venues$lon)
+map$geoJson(list(polygons)) #, list(style=list(color="#ff7800", weight=5, opacity=0.65)))
+# throwing very weird error!
+map
 ```
 
 The three _past_ locations are substantially better in the 3-location cost 
@@ -571,26 +566,6 @@ for (i in c(1,3,5)) {
 # TODO: Leaflet divIcon??
 map
 
-# TODO
-# will show both the historical 3-location cost 
-# as well as the theoretical best 3-location solution
-# ids <- factor(c("Past", "Optimized"))
-# values <- data.frame(id=ids, value=c(tri1_cost, three_loc_de$optim$bestval))
-# positions <- data.frame(id = rep(ids, each=3),
-#                         x=c(google[[1]], microsoft[[1]], funger[[1]], three_loc_de$optim$bestmem[c(1,3,5)]),
-#                         y=c(google[[2]], microsoft[[2]], funger[[2]], three_loc_de$optim$bestmem[c(2, 4, 6)]))
-# 
-# datapoly <- merge(values, positions, by="id")
-# make_map(dc.maps[[3]]) + geom_polygon(data=datapoly, aes(x=x,y=y,color=value,group=id), alpha=.1, size=2) +
-#     scale_color_continuous(low="blue", high="red")
-# 
-# make_map(dc.maps[[4]]) + geom_point(data=datapoly, aes(x=x,y=y,color=value), size=5) +
-#     scale_color_continuous(low="blue", high="red")
-# 
-# make_map(dc.maps[[5]]) + geom_point(data=datapoly, aes(x=x,y=y,color=value), size=5) +
-#     scale_color_continuous(low="blue", high="red")
-# 
-# print(datapoly)
 ```
 
 And we're done with the demo!
