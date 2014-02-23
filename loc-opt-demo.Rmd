@@ -210,6 +210,19 @@ Technical note: The sum of convex cost functions is provably convex.
 To compute distance to a _commute_, we need to use the "point to line
 segment" distance calculation, or "point to point" if only one 
 location was provided (unemployed, work at home, classified). 
+
+```{r plot_commutes}
+map <- Leaflet$new()
+map$setView(times_square, zoom = 10)
+map$tileLayer(provider = 'Stamen.Toner')
+d_ply(dat, 1, function(row) {
+  with(row, if (!is.na(home_latitude[[1]])) map$marker(c(home_latitude[[1]], home_longitude[[1]])))
+  with(row, if (!is.na(work_latitude[[1]])) map$marker(c(work_latitude[[1]], work_longitude[[1]])))
+})
+# TODO: Leaflet divIcon??
+map
+```
+
 Skip the somewhat slow surface-of-a-sphere
 distance now, and just use a simpler Euclidean distance.
 
@@ -276,45 +289,56 @@ print(p2ls_venue_costs)
 map <- Leaflet$new()
 map$setView(times_square, zoom = 10)
 map$tileLayer(provider = 'Stamen.Toner')
-d_ply(p2ls_venue_costs, 1, function(row) {
-  with(row, map$marker(c(lat, lon), bindPopup = name))
-})
+qq <- transform(p2ls_venue_costs, address=name, lat=lat, lng=lon, lon=NULL, radius=50, color = 'red', fillColor = '#f03', fillOpacity = 0.5)
+#map$circle2(qq)
+# d_ply(p2ls_venue_costs, 1, function(row) {
+#   with(row, map$circle(c(lat,lon)))    #arker(c(lat, lon), bindPopup = name))
+# })
 # TODO: color-code the icons!!
+#map$circle(c(p2ls_venue_costs$lat[[1]], p2ls_venue_costs$lon[[1]]), radius=1000)
+map$circle2(qq)
 map
 ```
 
 Interestingly, with point-to-line-segment (commute) cost, 
-Google is very slightly better than Funger, 
-whereas with point-to-point (work location) cost, Funger was substantially better. 
-Microsoft is definitely not great in either case.
+Pivotal is a lot better than AOL, whereas with point-to-point
+(work location) cost, Pivotal was only slightly better than AOL.
+Columbia's not great in either case.
 
 4. Mapping Single-Point Costs
 -----------------------------
 
 Pictures are worth many words. 
-Iterate over a grid to get costs for various maps, then plot.
+Iterate over a grid to get costs for various locations, then plot.
 
-```{r p2ls_cost_maps}
+```{r p2ls_cost_map}
 
-# global call to p2ls_cost()
-make_map <- function(map) {
-    bb = attr(map, "bb")
-    grid <- expand.grid(lat=seq(from=bb$ll.lat, to=bb$ur.lat, length.out=41),
-                        lon=seq(from=bb$ll.lon, to=bb$ur.lon, length.out=41))
-    grid <- adply(grid, 1, 
-                  function(rr) data.frame(cost=p2ls_cost(dat, rr$lon, rr$lat)))
-    
-    ggmap(map, extent='device') + 
-        geom_tile(data=grid, aes(x=lon, y=lat, fill=cost, alpha=1/cost)) +
-        scale_fill_gradientn("Cost", colours=rainbow(5)[5:1], trans='log') +
-        scale_alpha_continuous("Cost", range=c(.1,.5)) +
-        ggtitle("Distance from Commute") +
-        theme(legend.position='none')
-}
-for (map in dc.maps[c(1,3,5)]) {
-    p <- make_map(map) # handy to keep one around for later
-    print(p)
-}
+grid <- expand.grid(lat=seq(from=times_square[[1]]-.5, to=times_square[[1]]+.5, length.out=100),
+                        lon=seq(from=times_square[[2]]-.5, to=times_square[[2]]+.5, length.out=100))
+grid <- adply(grid, 1, 
+              function(rr) data.frame(cost=p2ls_cost(dat, rr$lon, rr$lat)))
+grid$goodness <- 1-(grid$cost/max(grid$cost))
+grid_json <- rjson::toJSON(rCharts::toJSONArray2(grid[,c('lat','lon','goodness')], json = F, names = F))
+
+map <- Leaflet$new()
+map$setView(times_square, zoom = 10)
+map$tileLayer(provider = 'Stamen.Toner')
+# map$addAssets(jshead = c(
+#   "http://leaflet.github.io/Leaflet.heat/dist/leaflet-heat.js"
+# ))
+
+
+# grid_json = '[[40.7577,-73.9857,0.909874011663595]]'
+# # Add javascript to modify underlying chart
+# map$setTemplate(afterScript = sprintf("
+# <script>
+#   var addressPoints = %s
+#   var heat = L.heatLayer(addressPoints, {radius: 13, blur: 1, gradient: {0.4: 'blue', 0.65: 'lime', 1: 'red'} }).addTo(map)           
+# </script>
+# ", grid_json
+# ))
+
+map
 ```
 
 The pretty maps show that downtown is the best place for a Meetup. </obvious>
@@ -339,17 +363,25 @@ p2ls_cost_opt <- function(params) {
     p2ls_cost(dat, params[[1]], params[[2]])
 }
 
-starting_points = list(google, microsoft, funger)
+starting_points = alply(venues, 1, function (rr) c(rr$lon, rr$lat))
 # call optim, which defaults to Nelder-Mead/Simplex
 one_loc <- llply(starting_points, function(sp) optim(sp, p2ls_cost_opt, control=list(trace=0)))
 print(laply(one_loc, function(ol) ol$par)) # all the same!
 
-# reuse the last map...
 single_p2ls_optim = list(x=one_loc[[1]]$par[[1]], y=one_loc[[1]]$par[[2]])
-p + annotate('point', x=single_p2ls_optim$x, y=single_p2ls_optim$y, size=6, color='white')
+
+map <- Leaflet$new()
+map$setView(times_square, zoom = 10)
+map$tileLayer(provider = 'Stamen.Toner')
+d_ply(p2p_venue_costs, 1, function(row) {
+  with(row, map$marker(c(single_p2ls_optim$y, single_p2ls_optim$x), bindPopup = name))
+})
+# TODO: Leaflet divIcon??
+map
+# p + annotate('point', x=single_p2ls_optim$x, y=single_p2ls_optim$y, size=6, color='white')
 ```
 
-A couple blocks South of Dupont Circle.
+6th Ave, 25th St! What's there? 2 Brothers Pizza! (natch)
 
 6. Computing N-Point Costs
 --------------------------
@@ -377,8 +409,9 @@ p2lsN_cost_opt <- function(latlons) {
 }
 
 # get cost for two example triples of locations
-tri1_cost <- p2lsN_cost_opt(c(google, microsoft, funger))
-tri2_cost <- p2lsN_cost_opt(c(google, microsoft, single_p2ls_optim))
+venue_triple <- unlist(dlply(venues, 1, function(rr) c(rr$lon, rr$lat)))
+tri1_cost <- p2lsN_cost_opt(venue_triple)
+tri2_cost <- p2lsN_cost_opt(unlist(c(venue_triple[1:4], single_p2ls_optim$y, single_p2ls_optim$x)))
 ```
 
 ```{r show_npoint}
