@@ -115,15 +115,24 @@ if (file.exists(maps_fn)) {
 ```
 
 ```{r map}
-# Plot the locations on a mostly-zoomed-in map
-p <- ggmap(dc.maps[[4]], extent='device') + 
-    geom_point(data=sum_work_locs, aes(x=lon, y=lat, color=type), size=6) +
-    scale_color_brewer("Type", type='qual') +
-    ggtitle("Work Location Simple Optima")
-print(p)
+# # Plot the locations on a mostly-zoomed-in map
+# p <- ggmap(dc.maps[[4]], extent='device') + 
+#     geom_point(data=sum_work_locs, aes(x=lon, y=lat, color=type), size=6) +
+#     scale_color_brewer("Type", type='qual') +
+#     ggtitle("Work Location Simple Optima")
+# print(p)
+
+map <- Leaflet$new()
+map$setView(times_square, zoom = 10)
+map$tileLayer(provider = 'Stamen.Toner')
+d_ply(sum_work_locs, 1, function(row) {
+  with(row, map$marker(c(lat, lon), bindPopup = type))
+})
+# TODO: Leaflet divIcon??
+map
 ```
 
-We're not doing that bad, as it turns out.
+You're not doing that bad, as it turns out.
 
 3. Computing Distances and Costs
 --------------------------------
@@ -153,7 +162,7 @@ earth.dist.o <- cmpfun(earth.dist) # make it a bit faster
 ```
 
 Define a simple point-to-point cost function, then calculate the costs
-of some recent venues for Data Science DC, and plot on a map.
+of some recent venues for NYOSP, and plot on a map.
 
 ```{r costfn}
 # df must have cols work_longitude and work latitude
@@ -166,29 +175,27 @@ p2p_cost <- function(df, lon, lat, scale=100,x=2) {
 
 # How good or bad are recent locations, for optimizing vs people's work
 # locations?
-## Recent locations funger hall, microsoft and google
-funger <- c(-77.048943, 38.899316)
-microsoft <- c( -77.086387, 38.962345)
-google <- c(-77.027485, 38.902138)
+## Recent locations: 
+venues <- data.frame(name=c('pivotal', 'aol', 'columbia'),
+                     lat=c(40.7403372,40.7308948,40.8074358),
+                     lon=c(-73.9951462,-73.9917096,-73.9625858))
 
-p2p_cost_funger <- p2p_cost(dat, funger[[1]], funger[[2]], scale=100)
-p2p_cost_microsoft <- p2p_cost(dat, microsoft[[1]], microsoft[[2]], scale=100)
-p2p_cost_google <- p2p_cost(dat, google[[1]], google[[2]], scale=100)
+p2p_venue_costs <- ddply(venues, .(name, lat, lon), 
+                         function(vv) data.frame(cost=p2p_cost(dat, lon=vv$lon, lat=vv$lat)))
 
 # map that
-recent_locs <- data.frame(type=c('Funger', 'Microsoft', 'Google'),
-                       lon=c(funger[[1]], microsoft[[1]], google[[1]]),
-                       lat=c(funger[[2]], microsoft[[2]], google[[2]]),
-                          cost=c(p2p_cost_funger, p2p_cost_microsoft,
-                                 p2p_cost_google))
-print(recent_locs)
+print(p2p_venue_costs)
 
-p <- ggmap(dc.maps[[4]], extent='device') + 
-    geom_point(data=recent_locs, aes(x=lon, y=lat, color=cost), size=6) +
-    geom_text(data=recent_locs, aes(x=lon, y=lat, color=cost, label=type), size=6, vjust=-1) +
-    scale_color_continuous("Cost", low='blue', high='red') +
-    ggtitle("Single-Point Cost of Recent Locations")
-print(p)
+# TODO: functionize this
+map <- Leaflet$new()
+map$setView(times_square, zoom = 10)
+map$tileLayer(provider = 'Stamen.Toner')
+d_ply(p2p_venue_costs, 1, function(row) {
+  with(row, map$marker(c(lat, lon), bindPopup = name))
+})
+# TODO: Leaflet divIcon??
+map
+
 ```
 
 The cost function is based on the sums of the point-to-point distances between 
@@ -261,25 +268,19 @@ p2ls_cost <- function(df, lon, lat, p=2) {
 Now, plot the costs of recent venues on a map, using point-to-line-segment.
 
 ```{r p2ls_examples}
-# non-DRY :(
-p2ls_cost_funger <- p2ls_cost(dat, funger[[1]], funger[[2]])
-p2ls_cost_microsoft <- p2ls_cost(dat, microsoft[[1]], microsoft[[2]])
-p2ls_cost_google <- p2ls_cost(dat, google[[1]], google[[2]])
+p2ls_venue_costs <- ddply(venues, .(name, lat, lon), 
+                         function(vv) data.frame(cost=p2ls_cost(dat, lon=vv$lon, lat=vv$lat)))
 
-recent_locs_p2ls <- data.frame(type=c('Funger', 'Microsoft', 'Google'),
-                       lon=c(funger[[1]], microsoft[[1]], google[[1]]),
-                       lat=c(funger[[2]], microsoft[[2]], google[[2]]),
-                          cost=c(p2ls_cost_funger, p2ls_cost_microsoft,
-                                 p2ls_cost_google))
+print(p2ls_venue_costs)
 
-p <- ggmap(dc.maps[[4]], extent='device') + 
-    geom_point(data=recent_locs_p2ls, aes(x=lon, y=lat, color=cost), size=6) +
-    geom_text(data=recent_locs_p2ls, aes(x=lon, y=lat, color=cost, label=type), size=6, vjust=-1) +
-    scale_color_continuous("Cost", low='blue', high='red') +
-    ggtitle("Location-to-Commute Cost of Recent Locations")
-print(p)
-
-print(recent_locs_p2ls)
+map <- Leaflet$new()
+map$setView(times_square, zoom = 10)
+map$tileLayer(provider = 'Stamen.Toner')
+d_ply(p2ls_venue_costs, 1, function(row) {
+  with(row, map$marker(c(lat, lon), bindPopup = name))
+})
+# TODO: color-code the icons!!
+map
 ```
 
 Interestingly, with point-to-line-segment (commute) cost, 
