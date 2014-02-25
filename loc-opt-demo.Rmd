@@ -24,6 +24,7 @@ suppressPackageStartupMessages(library(ggmap))
 suppressPackageStartupMessages(library(mapproj))
 suppressPackageStartupMessages(library(DEoptim))
 suppressMessages(library(rMaps))
+library(munsell) # for colors
 ```
 
 Setup
@@ -108,20 +109,16 @@ map$tileLayer(provider = 'Stamen.Toner')
 
 mk_marker <- function(lat, lon, name) {
     list(type='Feature',
-         properties=list(name=name, popupContent=name, color='red'),
+         properties=list(name=name, popupContent=name),
          geometry=list(type='Point', coordinates=c(lon, lat)))
 }
 markers <- dlply(sum_work_locs, 1, function(row) with(row, mk_marker(lat, lon, type)))
 names(markers) <- NULL # so converter creates a list
-map$geoJson(markers)
-#             '{
-#     style: function (feature) {
-#         return {color: feature.properties.color};
-#     },
-#     '{ onEachFeature: function (feature, layer) {
-#         layer.bindPopup(feature.properties.description);
-#     }
-# }')
+map$geoJson(markers,
+    onEachFeature='#! function (feature, layer) {
+        layer.bindPopup(feature.properties.popupContent);
+    } !#')
+            
 map
 ```
 
@@ -179,15 +176,35 @@ p2p_venue_costs <- ddply(venues, .(name, lat, lon),
 # 
 print(p2p_venue_costs)
 ```
+
+
 ```{r costfn_map, results='asis'}
 # TODO: functionize this
 map <- Leaflet$new()
 map$setView(times_square, zoom = 10)
 map$tileLayer(provider = 'Stamen.Toner')
-d_ply(p2p_venue_costs, 1, function(row) {
-  with(row, map$marker(c(lat, lon), bindPopup = name))
-})
-# TODO: Leaflet divIcon??
+
+mk_circle <- function(lat, lon, color) {
+    list(type='Feature',
+         properties=list(color='black', fillColor=mnsl(sprintf("5PB %d/10", color), fix=TRUE)),
+         geometry=list(type='Point', coordinates=c(lon, lat)))
+}
+
+p2p_venue_costs$cost_color <- with(p2p_venue_costs, 9-round(8*sqrt((cost-min(cost))/(max(cost)-min(cost)))))
+markers <- dlply(p2p_venue_costs, 1, function(row) with(row, mk_circle(lat, lon, cost_color)))
+names(markers) <- NULL # so converter creates a list
+map$geoJson(markers,
+    pointToLayer='#! function (feature, latlng) {
+        return L.circleMarker(latlng, {
+    radius: 8,
+    color: feature.properties.color,
+    fillColor: feature.properties.fillColor,
+    weight: 1,
+    opacity: 1,
+    fillOpacity: 0.8
+});
+    } !#')
+   
 map
 
 ```
@@ -222,7 +239,7 @@ mk_commuteline <- function(lat1, lon1, lat2, lon2) {
 commute_lines <- alply(dat, 1, function(row) with(row, mk_commuteline(home_latitude[[1]], home_longitude[[1]],
                                                                 work_latitude[[1]], work_longitude[[1]])))
 names(commute_lines) <- NULL # so converter creates a list
-map$geoJson(commute_lines, list(style=list(color="#ff7800", weight=5, opacity=0.65)))
+map$geoJson(commute_lines, style=list(color="#ff5800", weight=5, opacity=0.65))
 
 map
 ```
@@ -296,14 +313,23 @@ print(p2ls_venue_costs)
 map <- Leaflet$new()
 map$setView(times_square, zoom = 10)
 map$tileLayer(provider = 'Stamen.Toner')
-qq <- transform(p2ls_venue_costs, address=name, lat=lat, lng=lon, lon=NULL, radius=50, color = 'red', fillColor = '#f03', fillOpacity = 0.5)
-#map$circle2(qq)
-# d_ply(p2ls_venue_costs, 1, function(row) {
-#   with(row, map$circle(c(lat,lon)))    #arker(c(lat, lon), bindPopup = name))
-# })
-# TODO: color-code the icons!!
-#map$circle(c(p2ls_venue_costs$lat[[1]], p2ls_venue_costs$lon[[1]]), radius=1000)
-map$circle2(qq) # issues with the iterator in the circle2 code
+
+p2ls_venue_costs$cost_color <- with(p2ls_venue_costs, 
+                                    9-round(8*sqrt((cost-min(cost))/(max(cost)-min(cost)))))
+markers <- dlply(p2ls_venue_costs, 1, function(row) with(row, mk_circle(lat, lon, cost_color)))
+names(markers) <- NULL # so converter creates a list
+map$geoJson(markers,
+    pointToLayer='#! function (feature, latlng) {
+        return L.circleMarker(latlng, {
+    radius: 8,
+    color: feature.properties.color,
+    fillColor: feature.properties.fillColor,
+    weight: 1,
+    opacity: 1,
+    fillOpacity: 0.8
+});
+    } !#')
+
 map
 ```
 
@@ -320,12 +346,12 @@ Iterate over a grid to get costs for various locations, then plot.
 
 ```{r p2ls_cost}
 
-grid <- expand.grid(lat=seq(from=times_square[[1]]-.5, to=times_square[[1]]+.5, length.out=100),
-                        lon=seq(from=times_square[[2]]-.5, to=times_square[[2]]+.5, length.out=100))
-grid <- adply(grid, 1, 
+grd <- expand.grid(lat=seq(from=times_square[[1]]-.25, to=times_square[[1]]+.25, length.out=41),
+                        lon=seq(from=times_square[[2]]-.25, to=times_square[[2]]+.25, length.out=41))
+grd <- adply(grd, 1, 
               function(rr) data.frame(cost=p2ls_cost(dat, rr$lon, rr$lat)))
-grid$goodness <- 1-(grid$cost/max(grid$cost))
-grid_json <- rjson::toJSON(rCharts::toJSONArray2(grid[,c('lat','lon','goodness')], json = F, names = F))
+grd$goodness <- 1-(grd$cost/max(grd$cost))
+#grd_json <- rjson::toJSON(rCharts::toJSONArray2(grd[,c('lat','lon','goodness')], json = F, names = F))
 
 ```
 
@@ -333,20 +359,20 @@ grid_json <- rjson::toJSON(rCharts::toJSONArray2(grid[,c('lat','lon','goodness')
 map <- Leaflet$new()
 map$setView(times_square, zoom = 10)
 map$tileLayer(provider = 'Stamen.Toner')
-# map$addAssets(jshead = c(
-#   "http://leaflet.github.io/Leaflet.heat/dist/leaflet-heat.js"
-# ))
 
-
-# grid_json = '[[40.7577,-73.9857,0.909874011663595]]'
-# # Add javascript to modify underlying chart
-# map$setTemplate(afterScript = sprintf("
-# <script>
-#   var addressPoints = %s
-#   var heat = L.heatLayer(addressPoints, {radius: 13, blur: 1, gradient: {0.4: 'blue', 0.65: 'lime', 1: 'red'} }).addTo(map)           
-# </script>
-# ", grid_json
-# ))
+markers <- alply(grd, 1, function(row) with(row, mk_circle(lat[[1]], lon[[1]], round(goodness[[1]]*10))))
+names(markers) <- NULL # so converter creates a list
+map$geoJson(markers,
+    pointToLayer='#! function (feature, latlng) {
+        return L.circleMarker(latlng, {
+    radius: 8,
+    color: feature.properties.color,
+    fillColor: feature.properties.fillColor,
+    weight: 1,
+    opacity: 1,
+    fillOpacity: 0.8
+});
+    } !#')
 
 map
 ```
