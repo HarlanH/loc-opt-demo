@@ -1,0 +1,120 @@
+<!doctype HTML>
+<meta charset = 'utf-8'>
+<html>
+  <head>
+    <link rel='stylesheet' href='http://cdn.leafletjs.com/leaflet-0.5.1/leaflet.css'>
+    
+    <script src='http://cdn.leafletjs.com/leaflet-0.5.1/leaflet.js' type='text/javascript'></script>
+    <script src='https://rawgithub.com/leaflet-extras/leaflet-providers/gh-pages/leaflet-providers.js' type='text/javascript'></script>
+    <script src='http://harrywood.co.uk/maps/examples/leaflet/leaflet-plugins/layer/vector/KML.js' type='text/javascript'></script>
+    
+    <style>
+    .rChart {
+      display: block;
+      margin-left: auto; 
+      margin-right: auto;
+      width: 800px;
+      height: 400px;
+    }  
+    </style>
+    
+  </head>
+  <body >
+    
+    <div id = 'chartfa994786073f' class = 'rChart leaflet'></div>    
+    <script>
+  var spec = {
+ "dom": "chartfa994786073f",
+"width":            800,
+"height":            400,
+"urlTemplate": "http://{s}.tile.osm.org/{z}/{x}/{y}.png",
+"layerOpts": {
+ "attribution": "Map data<a href=\"http://openstreetmap.org\">OpenStreetMap</a>\n         contributors, Imagery<a href=\"http://mapbox.com\">MapBox</a>" 
+},
+"center": [        40.7577,       -73.9857 ],
+"zoom":             10,
+"provider": "Stamen.Toner",
+"circle2": [
+ {
+ "center": [
+     40.7308948,
+   -73.9917096 
+],
+"radius":             50,
+"opts": {
+ "name": "aol",
+"cost": 331.3684689485,
+"address": "aol",
+"color": "red",
+"fillColor": "#f03",
+"fillOpacity":            0.5 
+} 
+},
+{
+ "center": [
+     40.8074358,
+   -73.9625858 
+],
+"radius":             50,
+"opts": {
+ "name": "columbia",
+"cost": 431.5742560119,
+"address": "columbia",
+"color": "red",
+"fillColor": "#f03",
+"fillOpacity":            0.5 
+} 
+},
+{
+ "center": [
+     40.7403372,
+   -73.9951462 
+],
+"radius":             50,
+"opts": {
+ "name": "pivotal",
+"cost": 324.6556899469,
+"address": "pivotal",
+"color": "red",
+"fillColor": "#f03",
+"fillOpacity":            0.5 
+} 
+} 
+],
+"id": "chartfa994786073f" 
+}
+
+  var map = L.map(spec.dom, spec.mapOpts)
+  
+    map.setView(spec.center, spec.zoom);
+
+    if (spec.provider){
+      L.tileLayer.provider(spec.provider).addTo(map)    
+    } else {
+		  L.tileLayer(spec.urlTemplate, spec.layerOpts).addTo(map)
+    }
+     
+    
+    
+    
+    
+    
+    if (spec.circle2){
+      for (var c in spec.circle2){
+        var circle = L.circle(c.center, c.radius, c.opts)
+         .addTo(map);
+      }
+    }
+    
+    
+    
+    
+    
+   
+   
+   
+</script>
+    
+    <script></script>    
+  </body>
+</html>

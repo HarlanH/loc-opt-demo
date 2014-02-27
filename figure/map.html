@@ -1,0 +1,116 @@
+<!doctype HTML>
+<meta charset = 'utf-8'>
+<html>
+  <head>
+    <link rel='stylesheet' href='http://cdn.leafletjs.com/leaflet-0.5.1/leaflet.css'>
+    
+    <script src='http://cdn.leafletjs.com/leaflet-0.5.1/leaflet.js' type='text/javascript'></script>
+    <script src='https://rawgithub.com/leaflet-extras/leaflet-providers/gh-pages/leaflet-providers.js' type='text/javascript'></script>
+    <script src='http://harrywood.co.uk/maps/examples/leaflet/leaflet-plugins/layer/vector/KML.js' type='text/javascript'></script>
+    
+    <style>
+    .rChart {
+      display: block;
+      margin-left: auto; 
+      margin-right: auto;
+      width: 800px;
+      height: 400px;
+    }  
+    </style>
+    
+  </head>
+  <body >
+    
+    <div id = 'chart12237253a5af7' class = 'rChart leaflet'></div>    
+    <script>
+  var spec = {
+ "dom": "chart12237253a5af7",
+"width":            800,
+"height":            400,
+"urlTemplate": "http://{s}.tile.osm.org/{z}/{x}/{y}.png",
+"layerOpts": {
+ "attribution": "Map data<a href=\"http://openstreetmap.org\">OpenStreetMap</a>\n         contributors, Imagery<a href=\"http://mapbox.com\">MapBox</a>" 
+},
+"center": [        40.7577,       -73.9857 ],
+"zoom":             11,
+"provider": "Stamen.Toner",
+"features": [
+ {
+ "type": "Feature",
+"properties": {
+ "name": "Median",
+"popupContent": "Median" 
+},
+"geometry": {
+ "type": "Point",
+"coordinates": [      -73.99337,       40.74618 ] 
+} 
+},
+{
+ "type": "Feature",
+"properties": {
+ "name": "Modal",
+"popupContent": "Modal" 
+},
+"geometry": {
+ "type": "Point",
+"coordinates": [      -73.99653,      40.750742 ] 
+} 
+},
+{
+ "type": "Feature",
+"properties": {
+ "name": "Trimmed Mean",
+"popupContent": "Trimmed Mean" 
+},
+"geometry": {
+ "type": "Point",
+"coordinates": [ -73.98976748611, 40.74976826389 ] 
+} 
+} 
+],
+"id": "chart12237253a5af7" 
+}
+
+  var map = L.map(spec.dom, spec.mapOpts)
+  
+    map.setView(spec.center, spec.zoom);
+
+    if (spec.provider){
+      L.tileLayer.provider(spec.provider).addTo(map)    
+    } else {
+		  L.tileLayer(spec.urlTemplate, spec.layerOpts).addTo(map)
+    }
+     
+    
+    
+    
+    
+    
+    if (spec.circle2){
+      for (var c in spec.circle2){
+        var circle = L.circle(c.center, c.radius, c.opts)
+         .addTo(map);
+      }
+    }
+    
+    
+    
+    
+    var geojsonLayer = L.geoJson(spec.features 
+        , 
+         {
+ "onEachFeature":  function (feature, layer) {
+          layer.bindPopup(feature.properties.popupContent);
+        }  
+}
+      ).addTo(map)
+    
+   
+   
+   
+</script>
+    
+    <script></script>    
+  </body>
+</html>
