@@ -568,11 +568,11 @@ gradient heuristics at each generation, to (likely) find the global optimum.
 # random points in the bounding box instead.
 
 # This takes a few minutes. 
-# NP should be at least 60, itermax seems to converge around 100 or so,
+# NP should be at least 60, itermax seems to converge after a few hundred,
 # and strategy doesn't seem to make much difference for this decision
 # surface.
 three_loc_de <- DEoptim(cmpfun(p2lsN_cost_opt), lower=lower_box, upper=upper_box,
-                     control=list(trace=FALSE, NP=100, itermax=200, strategy=3))
+                     control=list(trace=FALSE, NP=100, itermax=300, strategy=3))
 # get a copy of coffee...
 # Note that not using parallel because running on a Mac in an R console...
 ```
