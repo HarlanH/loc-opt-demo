@@ -1,0 +1,18 @@
+Title
+========================================================
+
+test test
+
+
+```{r, results='asis'}
+suppressMessages(library(rMaps))
+map <- Leaflet$new()
+map$setView(c(38.8951, -77.0367), zoom = 13)
+map$tileLayer(provider = 'Stamen.Toner')
+map$marker(
+  c(38.8951, -77.0367),
+  bindPopup = 'Hi. I am a popup'
+)
+map
+```
+

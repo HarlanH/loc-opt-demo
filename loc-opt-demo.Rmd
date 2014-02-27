@@ -5,7 +5,7 @@ Harlan D. Harris and Alan Briggs
 
 Summary: This document walks through several ways of optimizing locations
 in R, given ZIP code data about peoples' home and work. Techniques include
-mapping with the `ggmaps` and `rmaps` package (beta!), continuous optimization with `optim`,
+mapping with the `rmaps` package (alpha!), continuous optimization with `optim`,
 and global optimization with the `DEoptim` package.
 
 For more information, see the [GitHub repository](https://github.com/HarlanH/loc-opt-demo).
@@ -20,8 +20,8 @@ suppressPackageStartupMessages(library(ggplot2))
 library(zipcode)
 library(plyr)
 library(compiler)
-suppressPackageStartupMessages(library(ggmap))
-suppressPackageStartupMessages(library(mapproj))
+#suppressPackageStartupMessages(library(ggmap))
+#suppressPackageStartupMessages(library(mapproj))
 suppressPackageStartupMessages(library(DEoptim))
 suppressMessages(library(rMaps))
 library(munsell) # for colors
@@ -36,9 +36,6 @@ add ZIP code information, including ZIP centroid latitude and longitude.
 ```{r loading}
 dat <- subset(read.csv('NYOSP_Locations.csv', colClasses='character'), select=c(Home.Zip, Work.Zip))
 dat <- rename(dat, c('Home.Zip'='home_zip', 'Work.Zip'='work_zip'))
-
-# dat <- subset(dat, Home_ZIP > 20000 & Home_ZIP < 30000 & 
-#                   (is.na(Work_ZIP) | (Work_ZIP > 20000 & Work_ZIP < 30000)))
 
 data(zipcode)
 home_zip <- zipcode
@@ -103,23 +100,30 @@ that lets us draw fancy-pants Leaflet maps!
 First, plot summary statistic locations on the map.
 
 ```{r map, results='asis'}
-map <- Leaflet$new()
-map$setView(times_square, zoom = 10)
-map$tileLayer(provider = 'Stamen.Toner')
+
 
 mk_marker <- function(lat, lon, name) {
     list(type='Feature',
          properties=list(name=name, popupContent=name),
          geometry=list(type='Point', coordinates=c(lon, lat)))
 }
-markers <- dlply(sum_work_locs, 1, function(row) with(row, mk_marker(lat, lon, type)))
-names(markers) <- NULL # so converter creates a list
-map$geoJson(markers,
-    onEachFeature='#! function (feature, layer) {
-        layer.bindPopup(feature.properties.popupContent);
-    } !#')
-            
-map
+
+map_with_markers <- function (latlontype, map, center=times_square) {
+    map <- Leaflet$new()
+    map$setView(center, zoom = 10)
+    map$tileLayer(provider = 'Stamen.Toner')
+    markers <- dlply(latlontype, 1, function(row) with(row, mk_marker(lat, lon, type)))
+    names(markers) <- NULL # so converter creates a list
+    map$geoJson(markers,
+        onEachFeature='#! function (feature, layer) {
+          layer.bindPopup(feature.properties.popupContent);
+        } !#')      
+    map
+}
+
+map_with_markers(sum_work_locs)
+
+
 ```
 
 You're not doing that bad, as it turns out.
@@ -179,33 +183,38 @@ print(p2p_venue_costs)
 
 
 ```{r costfn_map, results='asis'}
-# TODO: functionize this
-map <- Leaflet$new()
-map$setView(times_square, zoom = 10)
-map$tileLayer(provider = 'Stamen.Toner')
-
 mk_circle <- function(lat, lon, color) {
     list(type='Feature',
          properties=list(color='black', fillColor=mnsl(sprintf("5PB %d/10", color), fix=TRUE)),
          geometry=list(type='Point', coordinates=c(lon, lat)))
 }
 
-p2p_venue_costs$cost_color <- with(p2p_venue_costs, 9-round(8*sqrt((cost-min(cost))/(max(cost)-min(cost)))))
-markers <- dlply(p2p_venue_costs, 1, function(row) with(row, mk_circle(lat, lon, cost_color)))
-names(markers) <- NULL # so converter creates a list
-map$geoJson(markers,
-    pointToLayer='#! function (feature, latlng) {
-        return L.circleMarker(latlng, {
-    radius: 8,
-    color: feature.properties.color,
-    fillColor: feature.properties.fillColor,
-    weight: 1,
-    opacity: 1,
-    fillOpacity: 0.8
-});
-    } !#')
-   
-map
+plot_with_circles <- function(latloncost, center=times_square) {
+  map <- Leaflet$new()
+  map$setView(center, zoom = 10)
+  map$tileLayer(provider = 'Stamen.Toner')
+  
+  latloncost$cost_color <- with(latloncost, 
+                                9-round(8*sqrt((cost-min(cost))/(max(cost)-min(cost)))))
+  markers <- dlply(latloncost, 1, function(row) with(row, mk_circle(lat, lon, cost_color)))
+  names(markers) <- NULL # so converter creates a list
+  map$geoJson(markers,
+      pointToLayer='#! function (feature, latlng) {
+          return L.circleMarker(latlng, {
+      radius: 8,
+      color: feature.properties.color,
+      fillColor: feature.properties.fillColor,
+      weight: 1,
+      opacity: 1,
+      fillOpacity: 0.8
+  });
+      } !#')
+     
+  map
+
+}
+
+plot_with_circles(p2p_venue_costs)
 
 ```
 
@@ -223,9 +232,6 @@ segment" distance calculation, or "point to point" if only one
 location was provided (unemployed, work at home, classified). 
 
 ```{r plot_commutes, results='asis'}
-map <- Leaflet$new()
-map$setView(times_square, zoom = 10)
-map$tileLayer(provider = 'Stamen.Toner')
 
 mk_commuteline <- function(lat1, lon1, lat2, lon2) {
     if (is.na(lat2)) {
@@ -236,12 +242,22 @@ mk_commuteline <- function(lat1, lon1, lat2, lon2) {
          geometry=list(type='LineString', coordinates=list(c(lon1, lat1), c(lon2, lat2))))
     }
 }
-commute_lines <- alply(dat, 1, function(row) with(row, mk_commuteline(home_latitude[[1]], home_longitude[[1]],
-                                                                work_latitude[[1]], work_longitude[[1]])))
-names(commute_lines) <- NULL # so converter creates a list
-map$geoJson(commute_lines, style=list(color="#ff5800", weight=5, opacity=0.65))
 
-map
+plot_with_linesegs <- function (lat1, lon1, lat2, lon2, center=times_square, fn=mk_commuteline) {
+  map <- Leaflet$new()
+  map$setView(center, zoom = 10)
+  map$tileLayer(provider = 'Stamen.Toner')
+  
+  commute_lines <- llply(seq_along(lat1), function(i) fn(lat1[[i]], lon1[[i]],
+                                                         lat2[[i]], lon2[[i]]))
+  names(commute_lines) <- NULL # so converter creates a list
+  map$geoJson(commute_lines, style=list(color="#ff5800", weight=5, opacity=0.65))
+  
+  map
+}
+
+with(dat, plot_with_linesegs(home_latitude, home_longitude, work_latitude, work_longitude))
+
 ```
 
 Skip the somewhat slow surface-of-a-sphere
@@ -346,8 +362,8 @@ Iterate over a grid to get costs for various locations, then plot.
 
 ```{r p2ls_cost}
 
-grd <- expand.grid(lat=seq(from=times_square[[1]]-.25, to=times_square[[1]]+.25, length.out=41),
-                        lon=seq(from=times_square[[2]]-.25, to=times_square[[2]]+.25, length.out=41))
+grd <- expand.grid(lat=seq(from=times_square[[1]]-.1, to=times_square[[1]]+.1, length.out=31),
+                        lon=seq(from=times_square[[2]]-.1, to=times_square[[2]]+.1, length.out=31))
 grd <- adply(grd, 1, 
               function(rr) data.frame(cost=p2ls_cost(dat, rr$lon, rr$lat)))
 grd$goodness <- 1-(grd$cost/max(grd$cost))
