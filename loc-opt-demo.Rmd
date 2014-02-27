@@ -503,7 +503,7 @@ upper_box <- rep(c(times_square[[2]]+.5, times_square[[1]]+.5), 3)
 ```
 
 ```{r localminima1}
-# this takes 5-10 minutes for 10 runs... But only need a few to see the issue.
+# this takes a few minutes ... But only need a few runs to see the issue.
 set.seed(1) 
 nruns=5
 
@@ -535,22 +535,22 @@ Plot the triangles found in each run on top of each other. Uh oh.
 three_loc_pars <- laply(three_loc, function(ol) ol$par)
 print(three_loc_pars)
 
+# turn these into triangles and plot them
+df3_to_list <- function(dd) {
+    ret <- alply(dd, 1, function(row) list(lat=as.vector(row[c(2,4,6)]), lon=as.vector(row[c(1,3,5)]), color='black'))
+    names(ret) <- NULL
+    ret
+}
 
-# TODO
-# # turn these into a set of triangles and plot them
-# ids <- factor(1:nruns)
-# values <- data.frame(id=ids, value=laply(three_loc, function(x) x$value))
-# positions <- data.frame(id = rep(ids, each=3),
-#                         x=as.vector(t(three_loc_pars[,c(1,3,5)])),
-#                         y=as.vector(t(three_loc_pars[,c(2,4,6)])))
-# datapoly <- merge(values, positions, by="id")
-# make_map(dc.maps[[2]]) + 
-#     geom_polygon(data=datapoly, aes(x=x,y=y,color=value,group=id), alpha=.1, size=2) +
-#     scale_color_continuous(low="blue", high="red")
+plot_with_triangles(df3_to_list(three_loc_pars),
+                    style='#!  function(feature) {
+                        return { color: feature.properties.color }
+                     } !#', zoomlevel=9)
+
 ```
 
-It found a variety of points with each initial starting point. Not good. Let's throw some
-horsepower at this to be more confident of a global solution.
+It found widely differing 3-location "solutions" with each initial starting point. Not good.
+Let's throw some horsepower at this to be more confident we can find a global solution.
 
 8. Global N-Point Optimization
 ------------------------------
@@ -570,8 +570,6 @@ gradient heuristics at each generation, to (likely) find the global optimum.
 # surface.
 three_loc_de <- DEoptim(cmpfun(p2lsN_cost_opt), lower=lower_box, upper=upper_box,
                      control=list(trace=TRUE, NP=100, itermax=200, strategy=3))
-                         #NP=200, itermax=300, trace=TRUE, 
-                         #         strategy=2, c=.5, VTR=362, reltol=.0001, steptol=25))
 # get a copy of coffee...
 # Note that not using parallel because running on a Mac in an R console...
 ```
@@ -593,16 +591,12 @@ iter_values <- three_loc_de$member$bestvalit[1:three_loc_de$optim$iter]
 qplot(seq_along(iter_values), iter_values)
 
 ```
+
 ```{r deoptim_plots2, results='asis'}
-map <- Leaflet$new()
-map$setView(times_square, zoom = 10)
-map$tileLayer(provider = 'Stamen.Toner')
-best_pts <- three_loc_de$optim$bestmem
-for (i in c(1,3,5)) {
-    map$marker(as.vector(best_pts[(i+1):i]), bindPopup='')
-}
-# TODO: Leaflet divIcon??
-map
+plot_with_triangles(df3_to_list(data.frame(t(three_loc_de$optim$bestmem))),
+                    style='#!  function(feature) {
+                        return { color: feature.properties.color }
+                     } !#', zoomlevel=11)
 
 ```
 
