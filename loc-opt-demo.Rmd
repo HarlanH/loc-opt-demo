@@ -326,35 +326,13 @@ print(p2ls_venue_costs)
 ```
 
 ```{r p2ls_examples_map, results='asis'}
-# TODO: make this use above fns
-
-map <- Leaflet$new()
-map$setView(times_square, zoom = 10)
-map$tileLayer(provider = 'Stamen.Toner')
-
-p2ls_venue_costs$cost_color <- with(p2ls_venue_costs, 
-                                    9-round(8*sqrt((cost-min(cost))/(max(cost)-min(cost)))))
-markers <- dlply(p2ls_venue_costs, 1, function(row) with(row, mk_circle(lat, lon, cost_color)))
-names(markers) <- NULL # so converter creates a list
-map$geoJson(markers,
-    pointToLayer='#! function (feature, latlng) {
-        return L.circleMarker(latlng, {
-    radius: 8,
-    color: feature.properties.color,
-    fillColor: feature.properties.fillColor,
-    weight: 1,
-    opacity: 1,
-    fillOpacity: 0.8
-});
-    } !#')
-
-map
+plot_with_circles(p2ls_venue_costs)
 ```
 
 Interestingly, with point-to-line-segment (commute) cost, 
 Pivotal is a lot better than AOL, whereas with point-to-point
 (work location) cost, Pivotal was only slightly better than AOL.
-Columbia's not great in either case.
+Columbia's not great in either case. Looks the same on the map.
 
 4. Mapping Single-Point Costs
 -----------------------------
@@ -429,15 +407,11 @@ single_p2ls_optim = list(x=one_loc[[1]]$par[[1]], y=one_loc[[1]]$par[[2]])
 ```
 
 ```{r simple_p2ls_optim_map, results='asis'}
-map <- Leaflet$new()
-map$setView(c(single_p2ls_optim$y, single_p2ls_optim$x), zoom = 14)
-map$tileLayer(provider = 'Stamen.Toner')
-d_ply(p2p_venue_costs, 1, function(row) {
-  with(row, map$marker(c(single_p2ls_optim$y, single_p2ls_optim$x), bindPopup = name))
-})
-# TODO: Leaflet divIcon??
+# show the single optim vs the historical venues
+map <- plot_with_circles(p2ls_venue_costs)
+map$marker(c(single_p2ls_optim$y, single_p2ls_optim$x), bindPopup = 'optimal')
+
 map
-# p + annotate('point', x=single_p2ls_optim$x, y=single_p2ls_optim$y, size=6, color='white')
 ```
 
 6th Ave, 25th St! What's there? 2 Brothers Pizza! (natch)
