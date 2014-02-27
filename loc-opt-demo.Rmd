@@ -108,9 +108,9 @@ mk_marker <- function(lat, lon, name) {
          geometry=list(type='Point', coordinates=c(lon, lat)))
 }
 
-map_with_markers <- function (latlontype, map, center=times_square) {
+map_with_markers <- function (latlontype, map, center=times_square, zoomlevel=11) {
     map <- Leaflet$new()
-    map$setView(center, zoom = 10)
+    map$setView(center, zoom = zoomlevel)
     map$tileLayer(provider = 'Stamen.Toner')
     markers <- dlply(latlontype, 1, function(row) with(row, mk_marker(lat, lon, type)))
     names(markers) <- NULL # so converter creates a list
@@ -326,6 +326,8 @@ print(p2ls_venue_costs)
 ```
 
 ```{r p2ls_examples_map, results='asis'}
+# TODO: make this use above fns
+
 map <- Leaflet$new()
 map$setView(times_square, zoom = 10)
 map$tileLayer(provider = 'Stamen.Toner')
@@ -372,6 +374,8 @@ grd$goodness <- 1-(grd$cost/max(grd$cost))
 ```
 
 ```{r p2ls_cost_map, results='asis'}
+# TODO: make this better!
+
 map <- Leaflet$new()
 map$setView(times_square, zoom = 10)
 map$tileLayer(provider = 'Stamen.Toner')

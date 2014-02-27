@@ -14,8 +14,14 @@ map$tileLayer(provider = 'Stamen.Toner')
 mk_polygon <- function(lats, lons) {
     stopifnot(length(lats)==length(lons))
     coord_list <- llply(seq_along(lats), function(i) c(lons[[i]], lats[[i]]))
-    list(type='Feature',
-         geometry=list(type='Polygon', coordinates=coord_list))
+    list(
+        type = 'Feature',
+        properties = list(name = 'mypolygon'),
+        geometry = list(
+            type = 'Polygon', 
+            coordinates = list(coord_list)
+        )
+    )
 }
 polygons <- mk_polygon(venues$lat, venues$lon)
 map$geoJson(polygons) #, list(style=list(color="#ff7800", weight=5, opacity=0.65)))
