@@ -188,9 +188,9 @@ mk_circle <- function(lat, lon, color) {
          geometry=list(type='Point', coordinates=c(lon, lat)))
 }
 
-plot_with_circles <- function(latloncost, center=times_square) {
+plot_with_circles <- function(latloncost, center=times_square, zoomlevel=10) {
   map <- Leaflet$new()
-  map$setView(center, zoom = 10)
+  map$setView(center, zoom = zoomlevel)
   map$tileLayer(provider = 'Stamen.Toner')
   
   latloncost$cost_color <- with(latloncost, 
@@ -213,7 +213,7 @@ plot_with_circles <- function(latloncost, center=times_square) {
 
 }
 
-plot_with_circles(p2p_venue_costs)
+plot_with_circles(p2p_venue_costs, zoom=11)
 
 ```
 
@@ -325,7 +325,7 @@ print(p2ls_venue_costs)
 ```
 
 ```{r p2ls_examples_map, results='asis'}
-plot_with_circles(p2ls_venue_costs)
+plot_with_circles(p2ls_venue_costs, zoom=11)
 ```
 
 Interestingly, with point-to-line-segment (commute) cost, 
@@ -374,7 +374,7 @@ map$geoJson(markers,
 map
 ```
 
-The pretty maps show that downtown is the best place for a Meetup. </obvious>
+The pretty maps show that South of Midtown is the best place for a Meetup. </obvious>
 
 5. Optimizing Single Points
 ---------------------------
@@ -407,7 +407,7 @@ single_p2ls_optim = list(x=one_loc[[1]]$par[[1]], y=one_loc[[1]]$par[[2]])
 
 ```{r simple_p2ls_optim_map, results='asis'}
 # show the single optim vs the historical venues
-map <- plot_with_circles(p2ls_venue_costs)
+map <- plot_with_circles(p2ls_venue_costs, zoom=12)
 map$marker(c(single_p2ls_optim$y, single_p2ls_optim$x), bindPopup = 'optimal')
 
 map
@@ -542,7 +542,9 @@ df3_to_list <- function(dd, color='black') {
     names(ret) <- NULL
     ret
 }
+```
 
+```{r localminima2_map, results='asis'}
 plot_with_triangles(df3_to_list(three_loc_pars),
                     style='#!  function(feature) {
                         return { color: feature.properties.color }
