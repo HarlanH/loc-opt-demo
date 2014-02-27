@@ -585,8 +585,7 @@ from [a blog post](http://beyondtheblueeventhorizon.blogspot.com/2011/04/differe
 9. Mapping N-Point Solutions
 ----------------------------
 
-Show the DE convergence, and the global optimum on maps. The global optimum is,
-roughly, Downtown + Rockville + Southern Arlington.
+Show the DE convergence, and the global optimum on maps. 
 
 ```{r deoptim_plots1}
 # DEoptim bug makes plot.DEoptim not work right -- do it by hand
