@@ -448,20 +448,38 @@ tri2_cost <- p2lsN_cost_opt(unlist(c(venue_triple[1:4], single_p2ls_optim$y, sin
 ```
 
 ```{r show_npoint, results='asis'}
-map <- Leaflet$new()
-map$setView(times_square, zoom = 10)
-map$tileLayer(provider = 'Stamen.Toner')
-
-mk_polygon <- function(lats, lons) {
+mk_polygon <- function(lats, lons, color='black') {
     stopifnot(length(lats)==length(lons))
     coord_list <- llply(seq_along(lats), function(i) c(lons[[i]], lats[[i]]))
-    list(type='Feature',
-     geometry=list(type='Polygon', coordinates=coord_list))
+    list(
+      type = 'Feature',
+      properties = list(name = 'mypolygon', color = color),
+      geometry = list(
+          type = 'Polygon', 
+          coordinates = list(coord_list)
+      )
+    )
 }
-polygons <- mk_polygon(venues$lat, venues$lon)
-map$geoJson(list(polygons)) #, list(style=list(color="#ff7800", weight=5, opacity=0.65)))
-# throwing very weird error!
-map
+
+plot_with_triangles <- function (listoflists, center=times_square, zoomlevel=11, style='#! false !#') {
+    map <- Leaflet$new()
+    map$setView(center, zoom = zoomlevel)
+    map$tileLayer(provider = 'Stamen.Toner')
+  
+    polygons <- llply(listoflists, function(l) mk_polygon(l$lat, l$lon, l$color))
+    map$geoJson(polygons, style=style)
+  
+    map
+}
+
+venues_new <- subset(venues, name != 'columbia')
+venues_new <- rbind(venues_new, data.frame(name='optimal', lat=single_p2ls_optim$y,
+                                           lon=single_p2ls_optim$x))
+plot_with_triangles(list(list(lat=venues$lat, lon=venues$lon, color='blue'),
+                        list(lat=venues_new$lat, lon=venues_new$lon, color='red')),
+                    style='#!  function(feature) {
+                        return { color: feature.properties.color }
+                     } !#')
 ```
 
 The three _past_ locations are substantially better in the 3-location cost 
