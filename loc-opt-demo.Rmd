@@ -16,15 +16,13 @@ opts_chunk$set(fig.width=7, fig.height=5, echo=TRUE, cache=TRUE, autodep=TRUE)
 
 options(stringsAsFactors=FALSE)
 
-suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(ggplot2)) # for non-map plots
 library(zipcode)
-library(plyr)
-library(compiler)
-#suppressPackageStartupMessages(library(ggmap))
-#suppressPackageStartupMessages(library(mapproj))
-suppressPackageStartupMessages(library(DEoptim))
-suppressMessages(library(rMaps))
-library(munsell) # for colors
+library(plyr)        # for munging data
+library(compiler)    # speed up a few routines a bit
+suppressPackageStartupMessages(library(DEoptim)) # global optimization
+suppressMessages(library(rMaps)) # interactive maps!
+library(munsell)     # for colors
 ```
 
 Setup
@@ -36,6 +34,11 @@ add ZIP code information, including ZIP centroid latitude and longitude.
 ```{r loading}
 dat <- subset(read.csv('NYOSP_Locations.csv', colClasses='character'), select=c(Home.Zip, Work.Zip))
 dat <- rename(dat, c('Home.Zip'='home_zip', 'Work.Zip'='work_zip'))
+
+# gr, fix leading zeros
+dat <- mutate(dat,
+              home_zip = sprintf("%05d", as.numeric(home_zip)),
+              work_zip = sprintf("%05d", as.numeric(work_zip)))
 
 data(zipcode)
 home_zip <- zipcode
@@ -54,6 +57,7 @@ dat <- subset(dat, (abs(home_latitude - times_square[[1]]) < 2.0 &
 dat <- subset(dat, !is.na(home_latitude))
 
 head(dat)
+nrow(dat)
 ```
 
 1. Simple Statistics for Locations
@@ -62,7 +66,6 @@ head(dat)
 A simplest approach would be to find modal, mean, and median work locations.
 
 ```{r simple}
-
 # get the most common work zip code
 simple_mode <- names(which.max(table(dat$work_zip)))
 # then look up in the previously-pulled list of work zip codes
@@ -100,8 +103,6 @@ that lets us draw fancy-pants Leaflet maps!
 First, plot summary statistic locations on the map.
 
 ```{r map, results='asis'}
-
-
 mk_marker <- function(lat, lon, name) {
     list(type='Feature',
          properties=list(name=name, popupContent=name),
@@ -122,8 +123,6 @@ map_with_markers <- function (latlontype, map, center=times_square, zoomlevel=11
 }
 
 map_with_markers(sum_work_locs)
-
-
 ```
 
 You're not doing that bad, as it turns out.
@@ -414,7 +413,9 @@ map$marker(c(single_p2ls_optim$y, single_p2ls_optim$x), bindPopup = 'optimal')
 map
 ```
 
-6th Ave, 25th St! What's there? 2 Brothers Pizza! (natch)
+30th St between 5th and 6th! What's there? 
+
+![TSR Silicon Resources](16w30th.png)
 
 6. Computing N-Point Costs
 --------------------------
@@ -536,8 +537,8 @@ three_loc_pars <- laply(three_loc, function(ol) ol$par)
 print(three_loc_pars)
 
 # turn these into triangles and plot them
-df3_to_list <- function(dd) {
-    ret <- alply(dd, 1, function(row) list(lat=as.vector(row[c(2,4,6)]), lon=as.vector(row[c(1,3,5)]), color='black'))
+df3_to_list <- function(dd, color='black') {
+    ret <- alply(dd, 1, function(row) list(lat=as.vector(row[c(2,4,6)]), lon=as.vector(row[c(1,3,5)]), color=color))
     names(ret) <- NULL
     ret
 }
@@ -569,7 +570,7 @@ gradient heuristics at each generation, to (likely) find the global optimum.
 # and strategy doesn't seem to make much difference for this decision
 # surface.
 three_loc_de <- DEoptim(cmpfun(p2lsN_cost_opt), lower=lower_box, upper=upper_box,
-                     control=list(trace=TRUE, NP=100, itermax=200, strategy=3))
+                     control=list(trace=FALSE, NP=100, itermax=200, strategy=3))
 # get a copy of coffee...
 # Note that not using parallel because running on a Mac in an R console...
 ```
@@ -593,7 +594,7 @@ qplot(seq_along(iter_values), iter_values)
 ```
 
 ```{r deoptim_plots2, results='asis'}
-plot_with_triangles(df3_to_list(data.frame(t(three_loc_de$optim$bestmem))),
+plot_with_triangles(df3_to_list(data.frame(t(three_loc_de$optim$bestmem)), color='green'),
                     style='#!  function(feature) {
                         return { color: feature.properties.color }
                      } !#', zoomlevel=11)
